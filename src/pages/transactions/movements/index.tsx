@@ -24,14 +24,19 @@ import { DateUtils } from "@/utils/date-utils";
 import { FilterSheet } from "./components/FilterSheet";
 import { CreateTransactionDialog } from "./components/CreateTransactionDialog";
 import { EditTransactionDialog } from "./components/EditTransactionDialog";
+import { DeleteTransactionDialog } from "./components/DeleteTransactionDialog";
+import { toast } from "sonner";
 
 const TransactionsPage = () => {
 	// const navigate = useNavigate();
-	const { getTransactions } = useTransactions();
+	const { getTransactions, deleteTransaction } = useTransactions();
 	const [transactionsData, setTransactionsData] = useState<TransactionsRecordResponse | null>(null);
 	const [currentDate, setCurrentDate] = useState(new Date());
 	const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 	const [editingTransaction, setEditingTransaction] = useState<TransactionResponse | null>(null);
+	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+	const [deletingTransaction, setDeletingTransaction] = useState<TransactionResponse | null>(null);
+	const [isDeleting, setIsDeleting] = useState(false);
 	const [activeFilters, setActiveFilters] = useState<{
 		startDate: string;
 		endDate: string;
@@ -83,10 +88,38 @@ const TransactionsPage = () => {
 		setIsEditDialogOpen(true);
 	};
 
+	const handleOpenDelete = (transaction: TransactionResponse) => {
+		setDeletingTransaction(transaction);
+		setIsDeleteDialogOpen(true);
+	};
+
+	const handleDeleteDialogChange = (open: boolean) => {
+		setIsDeleteDialogOpen(open);
+		if (!open) {
+			setDeletingTransaction(null);
+		}
+	};
+
 	const handleEditDialogChange = (open: boolean) => {
 		setIsEditDialogOpen(open);
 		if (!open) {
 			setEditingTransaction(null);
+		}
+	};
+
+	const handleConfirmDelete = async () => {
+		if (!deletingTransaction?.id) return;
+		setIsDeleting(true);
+		try {
+			await deleteTransaction(deletingTransaction.id);
+			toast.success("Movimentação excluída com sucesso.");
+			handleDeleteDialogChange(false);
+			await loadTransactions();
+		} catch (error) {
+			console.error(error);
+			toast.error("Não foi possível excluir a movimentação.");
+		} finally {
+			setIsDeleting(false);
 		}
 	};
 
@@ -214,7 +247,7 @@ const TransactionsPage = () => {
 									<Edit className="mr-2 h-4 w-4 " />
 									Editar
 								</DropdownMenuItem>
-								<DropdownMenuItem className="text-red-600">
+								<DropdownMenuItem className="text-red-600" onClick={() => handleOpenDelete(transaction)}>
 									<Trash2 className="text-red-600 mr-2 h-4 w-4" />
 									Excluir
 								</DropdownMenuItem>
@@ -251,6 +284,13 @@ const TransactionsPage = () => {
 				onOpenChange={handleEditDialogChange}
 				transaction={editingTransaction}
 				onUpdated={loadTransactions}
+			/>
+			<DeleteTransactionDialog
+				open={isDeleteDialogOpen}
+				onOpenChange={handleDeleteDialogChange}
+				transaction={deletingTransaction}
+				onConfirm={handleConfirmDelete}
+				loading={isDeleting}
 			/>
 		</>
 	);
