@@ -6,7 +6,6 @@ import {
 	DialogFooter,
 	DialogHeader,
 	DialogTitle,
-	DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,20 +18,36 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Calendar, Layers, PiggyBank, Plus, Timer, TrendingDown, TrendingUp } from "lucide-react";
+import { Calendar, Layers, PiggyBank, Timer, TrendingDown, TrendingUp } from "lucide-react";
 import { useWallets } from "../../hooks/use-wallets";
 import { useCategories } from "../../hooks/use-categories";
-import { useTransactions } from "../../hooks/use-transactions";
-import { toast } from "sonner";
-import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { IntervalType } from "@/types/Interval-type ";
 import { DateUtils } from "@/utils/date-utils";
+import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
+import { useTransactions } from "../../hooks/use-transactions";
+import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
+import { toast } from "sonner";
 
 type TransactionType = "income" | "expense";
 
-type CreateTransactionDialogProps = {
-	onCreated?: () => void | Promise<void>;
-	defaultDate?: Date;
+type EditTransactionDialogProps = {
+	transaction: TransactionResponse | null;
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	onUpdated?: () => void | Promise<void>;
+};
+
+type FormState = {
+	description: string;
+	amount: string;
+	depositedDate: string;
+	walletId: string;
+	categoryId: string;
+	transactionType: TransactionType;
+	isRecurring: boolean;
+	isInstallment: boolean;
+	installmentNumber: string;
+	installmentInterval: IntervalType;
 };
 
 const intervalOptions: { label: string; value: IntervalType }[] = [
@@ -42,34 +57,61 @@ const intervalOptions: { label: string; value: IntervalType }[] = [
 	{ label: "Anual", value: "YEARLY" },
 ];
 
-const buildInitialState = (date?: Date) => ({
-	description: "",
-	amount: "",
-	depositedDate: DateUtils.formatToISODate(date ?? new Date()),
-	walletId: "",
-	categoryId: "",
-	transactionType: "expense" as TransactionType,
-	isRecurring: false,
-	isInstallment: false,
-	installmentNumber: "1",
-	installmentInterval: "MONTHLY" as IntervalType,
-});
+const parseDepositedDate = (date?: string) => {
+	if (!date) return DateUtils.formatToISODate(new Date());
+	return date.includes("T") ? date.split("T")[0] : date;
+};
 
-export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransactionDialogProps) => {
-	const [isOpen, setIsOpen] = useState(false);
+const buildInitialState = (transaction: TransactionResponse | null): FormState => {
+	if (!transaction) {
+		return {
+			description: "",
+			amount: "",
+			depositedDate: DateUtils.formatToISODate(new Date()),
+			walletId: "",
+			categoryId: "",
+			transactionType: "expense",
+			isRecurring: false,
+			isInstallment: false,
+			installmentNumber: "1",
+			installmentInterval: "MONTHLY",
+		};
+	}
+
+	const amountValue = Number(transaction.amount);
+
+	return {
+		description: transaction.description || "",
+		amount: Number.isNaN(amountValue) ? "" : Math.abs(amountValue).toString(),
+		depositedDate: parseDepositedDate(transaction.depositedDate),
+		walletId: transaction.wallet?.id || "",
+		categoryId: transaction.category?.id || "",
+		transactionType: amountValue < 0 ? "expense" : "income",
+		isRecurring: Boolean(transaction.isRecurring),
+		isInstallment: Boolean(transaction.isInstallment),
+		installmentNumber: transaction.installmentNumber ? transaction.installmentNumber.toString() : "1",
+		installmentInterval: (transaction.installmentInterval as unknown as IntervalType) || "MONTHLY",
+	};
+};
+
+export const EditTransactionDialog = ({
+	transaction,
+	open,
+	onOpenChange,
+	onUpdated,
+}: EditTransactionDialogProps) => {
+	const [formData, setFormData] = useState<FormState>(() => buildInitialState(transaction));
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [formData, setFormData] = useState(() => buildInitialState(defaultDate));
 
 	const { wallets, loading: walletsLoading } = useWallets();
 	const { categories, loading: categoriesLoading } = useCategories();
-	const { createTransaction } = useTransactions();
+	const { updateTransaction } = useTransactions();
 
 	useEffect(() => {
-		setFormData(prev => ({
-			...prev,
-			depositedDate: DateUtils.formatToISODate(defaultDate ?? new Date()),
-		}));
-	}, [defaultDate]);
+		if (transaction && open) {
+			setFormData(buildInitialState(transaction));
+		}
+	}, [transaction, open]);
 
 	const isValid = useMemo(() => {
 		return Boolean(
@@ -77,9 +119,10 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			formData.amount &&
 			formData.depositedDate &&
 			formData.walletId &&
-			formData.categoryId
+			formData.categoryId &&
+			transaction?.id
 		);
-	}, [formData]);
+	}, [formData, transaction?.id]);
 
 	const handleChange = <T extends unknown>(field: string, value: T) => {
 		setFormData(prev => ({
@@ -107,8 +150,13 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 	const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 
+		if (!transaction?.id) {
+			toast.error("Transação inválida para edição.");
+			return;
+		}
+
 		if (!isValid) {
-			toast.error("Preencha os campos obrigatórios para criar a transação.");
+			toast.error("Preencha os campos obrigatórios para salvar as alterações.");
 			return;
 		}
 
@@ -121,6 +169,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 		const normalizedAmount = formData.transactionType === "expense" ? -Math.abs(amountValue) : Math.abs(amountValue);
 
 		const payload: TransactionRequest = {
+			id: transaction.id,
 			depositedDate: formData.depositedDate,
 			description: formData.description.trim(),
 			walletId: formData.walletId,
@@ -130,47 +179,42 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			installmentNumber: formData.isInstallment ? Number(formData.installmentNumber) || null : null,
 			installmentInterval: formData.isInstallment ? formData.installmentInterval : null,
 			isRecurring: formData.isRecurring || null,
-			fitId: null,
-			bankName: "Manual",
-			bankId: "manual",
-			accountId: formData.walletId,
-			accountType: "MANUAL",
-			currency: "BRL",
+			fitId: transaction.fitId ?? null,
+			bankName: transaction.bankName ?? "Manual",
+			bankId: transaction.bankId ?? "manual",
+			accountId: transaction.accountId ?? formData.walletId,
+			accountType: transaction.accountType ?? "MANUAL",
+			currency: transaction.currency ?? "BRL",
 			transactionDate: formData.depositedDate,
-			transactionSource: "MANUAL",
+			transactionSource: transaction.transactionSource ?? "MANUAL",
 		};
 
 		setIsSubmitting(true);
 
 		try {
-			await createTransaction(payload);
-			toast.success("Transação criada com sucesso.");
-			setIsOpen(false);
-			setFormData(buildInitialState(defaultDate));
-			await onCreated?.();
+			await updateTransaction(payload);
+			toast.success("Transação atualizada com sucesso.");
+			onOpenChange(false);
+			await onUpdated?.();
 		} catch (error) {
 			console.error(error);
-			toast.error("Não foi possível criar a transação.");
+			toast.error("Não foi possível atualizar a transação.");
 		} finally {
 			setIsSubmitting(false);
 		}
 	};
 
+	if (!transaction) {
+		return null;
+	}
+
 	return (
-		<Dialog open={isOpen} onOpenChange={setIsOpen}>
-			<DialogTrigger asChild>
-				<Button>
-					<Plus className="h-4 w-4 mr-2" />
-					Nova Transação
-				</Button>
-			</DialogTrigger>
+		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-2xl">
 				<form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
 					<DialogHeader className="space-y-2">
-						<DialogTitle>Nova transação</DialogTitle>
-						<DialogDescription>
-							Informe os dados da transação para registrar manualmente uma movimentação.
-						</DialogDescription>
+						<DialogTitle>Editar transação</DialogTitle>
+						<DialogDescription>Atualize os dados da movimentação selecionada.</DialogDescription>
 					</DialogHeader>
 
 					<div className="flex-1 overflow-y-auto py-6 space-y-6 pr-1">
@@ -361,11 +405,11 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 					</div>
 
 					<DialogFooter className="gap-3 border-t pt-4">
-						<Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
+						<Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
 							Cancelar
 						</Button>
 						<Button type="submit" disabled={!isValid || isSubmitting}>
-							{isSubmitting ? "Salvando..." : "Salvar"}
+							{isSubmitting ? "Salvando..." : "Salvar alterações"}
 						</Button>
 					</DialogFooter>
 				</form>
