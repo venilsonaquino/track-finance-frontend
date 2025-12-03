@@ -19,7 +19,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Calendar, Layers, PiggyBank, Plus, Timer, TrendingDown, TrendingUp } from "lucide-react";
+import { Calendar, Layers, PiggyBank, Plus, Timer, TrendingDown, TrendingUp, Info } from "lucide-react";
 import { useWallets } from "../../hooks/use-wallets";
 import { useCategories } from "../../hooks/use-categories";
 import { useTransactions } from "../../hooks/use-transactions";
@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { IntervalType } from "@/types/Interval-type ";
 import { DateUtils } from "@/utils/date-utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type TransactionType = "income" | "expense";
 
@@ -53,6 +54,7 @@ const buildInitialState = (date?: Date) => ({
 	isInstallment: false,
 	installmentNumber: "1",
 	installmentInterval: "MONTHLY" as IntervalType,
+	affectBalance: true,
 });
 
 export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransactionDialogProps) => {
@@ -138,6 +140,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			currency: "BRL",
 			transactionDate: formData.depositedDate,
 			transactionSource: "MANUAL",
+			affectBalance: formData.affectBalance,
 		};
 
 		setIsSubmitting(true);
@@ -261,6 +264,31 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 										)}
 									</SelectContent>
 								</Select>
+							</div>
+						</div>
+
+						<div className="space-y-1">
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<Label className="cursor-default">Afetar saldo da carteira?</Label>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												className="h-7 w-7 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground"
+											>
+												<Info className="h-4 w-4" />
+											</button>
+										</TooltipTrigger>
+										<TooltipContent side="top">
+											Se desativado, essa transação será registrada apenas para controle e não alterará seu saldo.
+										</TooltipContent>
+									</Tooltip>
+								</div>
+								<Switch
+									checked={formData.affectBalance}
+									onCheckedChange={(checked) => handleChange("affectBalance", checked)}
+								/>
 							</div>
 						</div>
 

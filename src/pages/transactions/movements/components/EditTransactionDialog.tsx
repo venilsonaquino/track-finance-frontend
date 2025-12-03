@@ -18,7 +18,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Calendar, Layers, PiggyBank, Timer, TrendingDown, TrendingUp } from "lucide-react";
+import { Calendar, Layers, PiggyBank, Timer, TrendingDown, TrendingUp, Info } from "lucide-react";
 import { useWallets } from "../../hooks/use-wallets";
 import { useCategories } from "../../hooks/use-categories";
 import { IntervalType } from "@/types/Interval-type ";
@@ -27,6 +27,7 @@ import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse"
 import { useTransactions } from "../../hooks/use-transactions";
 import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type TransactionType = "income" | "expense";
 
@@ -48,6 +49,7 @@ type FormState = {
 	isInstallment: boolean;
 	installmentNumber: string;
 	installmentInterval: IntervalType;
+	affectBalance: boolean;
 };
 
 const intervalOptions: { label: string; value: IntervalType }[] = [
@@ -75,6 +77,7 @@ const buildInitialState = (transaction: TransactionResponse | null): FormState =
 			isInstallment: false,
 			installmentNumber: "1",
 			installmentInterval: "MONTHLY",
+			affectBalance: true,
 		};
 	}
 
@@ -91,6 +94,7 @@ const buildInitialState = (transaction: TransactionResponse | null): FormState =
 		isInstallment: Boolean(transaction.isInstallment),
 		installmentNumber: transaction.installmentNumber ? transaction.installmentNumber.toString() : "1",
 		installmentInterval: (transaction.installmentInterval as unknown as IntervalType) || "MONTHLY",
+		affectBalance: true,
 	};
 };
 
@@ -187,6 +191,7 @@ export const EditTransactionDialog = ({
 			currency: transaction.currency ?? "BRL",
 			transactionDate: formData.depositedDate,
 			transactionSource: transaction.transactionSource ?? "MANUAL",
+			affectBalance: formData.affectBalance,
 		};
 
 		setIsSubmitting(true);
@@ -305,6 +310,31 @@ export const EditTransactionDialog = ({
 										)}
 									</SelectContent>
 								</Select>
+							</div>
+						</div>
+
+						<div className="space-y-1">
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<Label className="cursor-default">Afetar saldo da carteira?</Label>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												className="h-7 w-7 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground"
+											>
+												<Info className="h-4 w-4" />
+											</button>
+										</TooltipTrigger>
+										<TooltipContent side="top">
+											Se desativado, essa transação será registrada apenas para controle e não alterará seu saldo.
+										</TooltipContent>
+									</Tooltip>
+								</div>
+								<Switch
+									checked={formData.affectBalance}
+									onCheckedChange={(checked) => handleChange("affectBalance", checked)}
+								/>
 							</div>
 						</div>
 
