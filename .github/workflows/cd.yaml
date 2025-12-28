@@ -1,9 +1,8 @@
-name: cd-track-finance-admin-workflow
+name: cd-track-finance-frontend-workflow
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: write
@@ -12,7 +11,6 @@ permissions:
 jobs:
   tag-version:
     runs-on: ubuntu-latest
-
     outputs:
       new_tag: ${{ steps.tag_bump.outputs.new_tag }}
 
@@ -27,11 +25,11 @@ jobs:
           DEFAULT_BUMP: patch
           WITH_V: true
 
-  build-and-push:
+  build-test-and-push:
     runs-on: ubuntu-latest
     needs: tag-version
     environment: production
-    
+
     steps:
       - uses: actions/checkout@v3
 
@@ -48,9 +46,6 @@ jobs:
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -60,11 +55,45 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build image (local)
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
+          file: docker/Dockerfile.prod
+          push: false
+          load: true
           tags: |
-            venilson/track-finance-admin:latest
-            venilson/track-finance-admin:${{ needs.tag-version.outputs.new_tag }}
+            venilson/track-finance-frontend:latest
+            venilson/track-finance-frontend:${{ needs.tag-version.outputs.new_tag }}
+
+      - name: Smoke test
+        run: |
+          docker run --rm venilson/track-finance-frontend:latest ls -la /usr/share/nginx/html
+
+      - name: Push image
+        run: |
+          docker push venilson/track-finance-frontend:latest
+          docker push venilson/track-finance-frontend:${{ needs.tag-version.outputs.new_tag }}
+
+
+  # deploy:
+  #   runs-on: ubuntu-latest
+  #   needs: push-image
+
+  #   steps:
+  #     - name: Deploy to homelab
+  #       uses: appleboy/ssh-action@v1.0.3
+  #       with:
+  #         host: ${{ secrets.SERVER_HOST }}
+  #         username: ${{ secrets.SERVER_USER }}
+  #         key: ${{ secrets.SERVER_KEY }}
+  #         script: |
+  #           docker pull track-finance-api/app:latest
+
+  #           docker stop track-finance-api || true
+  #           docker rm track-finance-api || true
+
+  #           docker run -d --name track-finance-api \
+  #             -p 3000:3000 \
+  #             track-finance-api/app:latest
+              

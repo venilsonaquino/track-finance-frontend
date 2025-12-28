@@ -90,12 +90,12 @@ const buildInitialState = (transaction: TransactionResponse | null): FormState =
 		walletId: transaction.wallet?.id || "",
 		categoryId: transaction.category?.id || "",
 		transactionType: amountValue < 0 ? "expense" : "income",
-		isRecurring: Boolean(transaction.isRecurring),
-		isInstallment: Boolean(transaction.isInstallment),
-		installmentNumber: transaction.installmentNumber ? transaction.installmentNumber.toString() : "1",
-		installmentInterval: (transaction.installmentInterval as unknown as IntervalType) || "MONTHLY",
-		affectBalance: true,
-	};
+	isRecurring: Boolean(transaction.isRecurring),
+	isInstallment: Boolean(transaction.isInstallment),
+	installmentNumber: transaction.installmentNumber ? transaction.installmentNumber.toString() : "1",
+	installmentInterval: (transaction.installmentInterval as unknown as IntervalType) || "MONTHLY",
+	affectBalance: transaction.affectBalance ?? true,
+};
 };
 
 export const EditTransactionDialog = ({

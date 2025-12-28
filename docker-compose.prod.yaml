@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  frontend:
+    image: venilson/track-finance-frontend:latest
+    container_name: track-finance-frontend
+    ports:
+      - "8081:80"
+    networks:
+      - trackfinannet
+    restart: always
+
+networks:
+  trackfinannet:
+    driver: bridge

@@ -26,6 +26,7 @@ export interface TransactionResponse {
   currency: string;
   transactionDate: string;
   transactionSource: string;
+  affectBalance?: boolean;
   balance: string;
   balanceDate: string;
 }
