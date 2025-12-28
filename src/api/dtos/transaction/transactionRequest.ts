@@ -19,4 +19,5 @@ export interface TransactionRequest {
   currency: string;
   transactionDate: string;
   transactionSource: string;
+  affectBalance?: boolean;
 }
