@@ -1,4 +1,4 @@
-name: ci-track-finance-admin-workflow
+name: ci-track-finance-frontend-workflow
 
 on:
   push:

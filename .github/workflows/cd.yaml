@@ -1,4 +1,4 @@
-name: cd-track-finance-admin-workflow
+name: cd-track-finance-frontend-workflow
 
 on:
   push:
@@ -30,24 +30,22 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: docker/Dockerfile.prod
           push: false
-          tags: track-finance-admin/app:latest
+          load: true
+          tags: venilson/track-finance-frontend:latest
+
+      - name: Smoke test frontend image
+        run: |
+          docker run --rm venilson/track-finance-frontend:latest ls -la /usr/share/nginx/html
+
 
   push-image:
     runs-on: ubuntu-latest
@@ -55,9 +53,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -73,9 +68,10 @@ jobs:
         with:
           context: .
           push: true
+          file: docker/Dockerfile.prod
           tags: |
-            venilson/track-finance-admin:latest
-            venilson/track-finance-admin:${{ github.sha }}
+            venilson/track-finance-frontend:latest
+            venilson/track-finance-frontend:${{ github.sha }}
 
   # deploy:
   #   runs-on: ubuntu-latest
