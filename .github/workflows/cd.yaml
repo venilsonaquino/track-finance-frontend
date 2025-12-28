@@ -2,8 +2,7 @@ name: cd-track-finance-frontend-workflow
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: write
@@ -12,7 +11,6 @@ permissions:
 jobs:
   tag-version:
     runs-on: ubuntu-latest
-
     outputs:
       new_tag: ${{ steps.tag_bump.outputs.new_tag }}
 
@@ -27,7 +25,7 @@ jobs:
           DEFAULT_BUMP: patch
           WITH_V: true
 
-  build-and-push:
+  build-test-and-push:
     runs-on: ubuntu-latest
     needs: tag-version
     environment: production
@@ -58,45 +56,31 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/Dockerfile.prod
-          push: false
-          load: true
-          tags: venilson/track-finance-frontend:latest
-
-      - name: Smoke test frontend image
-        run: |
-          docker run --rm venilson/track-finance-frontend:latest ls -la /usr/share/nginx/html
-
-
-  push-image:
-    runs-on: ubuntu-latest
-    needs: build-image
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push Docker image
+      - name: Build image (local)
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
           file: docker/Dockerfile.prod
+          push: false
+          load: true
           tags: |
             venilson/track-finance-frontend:latest
-            venilson/track-finance-frontend:${{ github.sha }}
+            venilson/track-finance-frontend:${{ needs.tag-version.outputs.new_tag }}
+
+      - name: Smoke test
+        run: |
+          docker run --rm venilson/track-finance-frontend:latest ls -la /usr/share/nginx/html
+
+      - name: Push image
+        run: |
+          docker push venilson/track-finance-frontend:latest
+          docker push venilson/track-finance-frontend:${{ needs.tag-version.outputs.new_tag }}
 
   # deploy:
   #   runs-on: ubuntu-latest
