@@ -25,6 +25,7 @@ import { useCategories } from "../../hooks/use-categories";
 import { useTransactions } from "../../hooks/use-transactions";
 import { toast } from "sonner";
 import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
+import { maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 import { IntervalType } from "@/types/Interval-type ";
 import { DateUtils } from "@/utils/date-utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -90,6 +91,10 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 		}));
 	};
 
+	const handleAmountChange = (value: string) => {
+		handleChange("amount", maskCurrencyInput(value));
+	};
+
 	const handleToggleRecurring = (checked: boolean) => {
 		setFormData(prev => ({
 			...prev,
@@ -114,39 +119,39 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			return;
 		}
 
-		const amountValue = Number(formData.amount);
-		if (Number.isNaN(amountValue)) {
+		const amountValue = parseCurrencyInput(formData.amount);
+		if (!Number.isFinite(amountValue)) {
 			toast.error("Informe um valor válido.");
 			return;
 		}
 
-		const normalizedAmount = formData.transactionType === "expense" ? -Math.abs(amountValue) : Math.abs(amountValue);
+		// const normalizedAmount = formData.transactionType === "expense" ? -Math.abs(amountValue) : Math.abs(amountValue);
 
-		const payload: TransactionRequest = {
-			depositedDate: formData.depositedDate,
-			description: formData.description.trim(),
-			walletId: formData.walletId,
-			categoryId: formData.categoryId,
-			amount: normalizedAmount,
-			isInstallment: formData.isInstallment || null,
-			installmentNumber: formData.isInstallment ? Number(formData.installmentNumber) || null : null,
-			installmentInterval: formData.isInstallment ? formData.installmentInterval : null,
-			isRecurring: formData.isRecurring || null,
-			fitId: null,
-			bankName: "Manual",
-			bankId: "manual",
-			accountId: formData.walletId,
-			accountType: "MANUAL",
-			currency: "BRL",
-			transactionDate: formData.depositedDate,
-			transactionSource: "MANUAL",
-			affectBalance: formData.affectBalance,
-		};
+		// const payload: TransactionRequest = {
+		// 	depositedDate: formData.depositedDate,
+		// 	description: formData.description.trim(),
+		// 	walletId: formData.walletId,
+		// 	categoryId: formData.categoryId,
+		// 	amount: normalizedAmount,
+		// 	isInstallment: formData.isInstallment || null,
+		// 	installmentNumber: formData.isInstallment ? Number(formData.installmentNumber) || null : null,
+		// 	installmentInterval: formData.isInstallment ? formData.installmentInterval : null,
+		// 	isRecurring: formData.isRecurring || null,
+		// 	fitId: null,
+		// 	bankName: "Manual",
+		// 	bankId: "manual",
+		// 	accountId: formData.walletId,
+		// 	accountType: "MANUAL",
+		// 	currency: "BRL",
+		// 	transactionDate: formData.depositedDate,
+		// 	transactionSource: "MANUAL",
+		// 	affectBalance: formData.affectBalance,
+		// };
 
 		setIsSubmitting(true);
 
 		try {
-			await createTransaction(payload);
+			// await createTransaction(payload);
 			toast.success("Transação criada com sucesso.");
 			setIsOpen(false);
 			setFormData(buildInitialState(defaultDate));
@@ -193,12 +198,11 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 								<Label htmlFor="amount">Valor</Label>
 								<Input
 									id="amount"
-									type="number"
-									step="0.01"
+									type="text"
 									inputMode="decimal"
 									placeholder="0,00"
 									value={formData.amount}
-									onChange={(e) => handleChange("amount", e.target.value)}
+									onChange={(e) => handleAmountChange(e.target.value)}
 								/>
 							</div>
 							<div className="space-y-2">

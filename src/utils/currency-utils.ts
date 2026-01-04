@@ -11,3 +11,10 @@ export function maskCurrencyInput(value: string): string {
       maximumFractionDigits: 2 
     }).format(numberValue);
 }
+
+export function parseCurrencyInput(value: string): number {
+  if (!value) return NaN;
+  const normalized = value.replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
