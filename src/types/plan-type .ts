@@ -1,0 +1,1 @@
+type PlanType = "TRANSACTION" | "RECURRING" | "INSTALLMENT";

@@ -22,19 +22,33 @@ import { Switch } from "@/components/ui/switch";
 import { Calendar, Layers, PiggyBank, Plus, Timer, TrendingDown, TrendingUp, Info } from "lucide-react";
 import { useWallets } from "../../hooks/use-wallets";
 import { useCategories } from "../../hooks/use-categories";
-import { useTransactions } from "../../hooks/use-transactions";
+// import { useTransactions } from "../../hooks/use-transactions";
 import { toast } from "sonner";
-import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
-import { maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
-import { IntervalType } from "@/types/Interval-type ";
+import { maskCurrencyInput } from "@/utils/currency-utils";
 import { DateUtils } from "@/utils/date-utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { IntervalType } from "@/types/Interval-type ";
+import { useTransactions } from "../../hooks/use-transactions";
 
 type TransactionType = "income" | "expense";
 
 type CreateTransactionDialogProps = {
 	onCreated?: () => void | Promise<void>;
 	defaultDate?: Date;
+};
+
+type FormState = {
+  description: string;
+  amount: string; // "0,00" (masked)
+  date: string;   // YYYY-MM-DD
+  walletId: string;
+  categoryId: string;
+  transactionType: TransactionType;
+  isRecurring: boolean;
+  isInstallment: boolean;
+  installmentNumber: string; // depois a gente melhora pra number
+  installmentInterval: IntervalType;
+  affectBalance: boolean;
 };
 
 const intervalOptions: { label: string; value: IntervalType }[] = [
@@ -44,10 +58,10 @@ const intervalOptions: { label: string; value: IntervalType }[] = [
 	{ label: "Anual", value: "YEARLY" },
 ];
 
-const buildInitialState = (date?: Date) => ({
+const buildInitialState = (date?: Date): FormState => ({
 	description: "",
 	amount: "",
-	depositedDate: DateUtils.formatToISODate(date ?? new Date()),
+	date: DateUtils.formatToISODate(date ?? new Date()),
 	walletId: "",
 	categoryId: "",
 	transactionType: "expense" as TransactionType,
@@ -70,7 +84,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 	useEffect(() => {
 		setFormData(prev => ({
 			...prev,
-			depositedDate: DateUtils.formatToISODate(defaultDate ?? new Date()),
+			date: DateUtils.formatToISODate(defaultDate ?? new Date()),
 		}));
 	}, [defaultDate]);
 
@@ -78,18 +92,27 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 		return Boolean(
 			formData.description.trim() &&
 			formData.amount &&
-			formData.depositedDate &&
+			formData.date &&
 			formData.walletId &&
 			formData.categoryId
 		);
 	}, [formData]);
 
-	const handleChange = <T extends unknown>(field: string, value: T) => {
-		setFormData(prev => ({
-			...prev,
-			[field]: value,
-		}));
-	};
+	// const handleChange = <T extends unknown>(field: string, value: T) => {
+	// 	setFormData(prev => ({
+	// 		...prev,
+	// 		[field]: value,
+	// 	}));
+	// };
+
+	const planType: PlanType =
+  formData.isInstallment ? "INSTALLMENT" :
+  formData.isRecurring ? "RECURRING" :
+  "TRANSACTION";
+
+	const handleChange = <K extends keyof FormState>(field: K, value: FormState[K]) => {
+		setFormData(prev => ({ ...prev, [field]: value }));
+	}
 
 	const handleAmountChange = (value: string) => {
 		handleChange("amount", maskCurrencyInput(value));
@@ -119,39 +142,58 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			return;
 		}
 
-		const amountValue = parseCurrencyInput(formData.amount);
-		if (!Number.isFinite(amountValue)) {
-			toast.error("Informe um valor válido.");
-			return;
-		}
-
-		// const normalizedAmount = formData.transactionType === "expense" ? -Math.abs(amountValue) : Math.abs(amountValue);
-
-		// const payload: TransactionRequest = {
-		// 	depositedDate: formData.depositedDate,
-		// 	description: formData.description.trim(),
-		// 	walletId: formData.walletId,
-		// 	categoryId: formData.categoryId,
-		// 	amount: normalizedAmount,
-		// 	isInstallment: formData.isInstallment || null,
-		// 	installmentNumber: formData.isInstallment ? Number(formData.installmentNumber) || null : null,
-		// 	installmentInterval: formData.isInstallment ? formData.installmentInterval : null,
-		// 	isRecurring: formData.isRecurring || null,
-		// 	fitId: null,
-		// 	bankName: "Manual",
-		// 	bankId: "manual",
-		// 	accountId: formData.walletId,
-		// 	accountType: "MANUAL",
-		// 	currency: "BRL",
-		// 	transactionDate: formData.depositedDate,
-		// 	transactionSource: "MANUAL",
-		// 	affectBalance: formData.affectBalance,
-		// };
+		const normalizedAmount =
+      formData.transactionType === "expense"
+        ? `-${formData.amount.replace("-", "").replace(/\./g, "").replace(",", ".")}`
+        : formData.amount.replace("-", "").replace(/\./g, "").replace(",", ".");
 
 		setIsSubmitting(true);
 
 		try {
-			// await createTransaction(payload);
+			 switch (planType) {
+				case "TRANSACTION": {
+					const payload: unknown = {
+						walletId: formData.walletId,
+						categoryId: formData.categoryId,
+						description: formData.description.trim(),
+						transactionType: formData.transactionType,
+						amount: normalizedAmount,
+						date: formData.date,
+						affectBalance: formData.affectBalance,
+					};
+					// await createTransaction(payload);
+					break;
+				}
+
+				case "RECURRING": {
+					const payload: unknown = {
+						walletId: formData.walletId,
+						categoryId: formData.categoryId,
+						description: formData.description.trim(),
+						amount: normalizedAmount,
+						firstDueDate: formData.date,
+						interval: formData.installmentInterval, // por enquanto reutiliza esse select
+					};
+					// await createRecurringContract(payload);
+					break;
+				}
+
+				case "INSTALLMENT": {
+					const payload: unknown = {
+						walletId: formData.walletId,
+						categoryId: formData.categoryId,
+						description: formData.description.trim(),
+						amount: normalizedAmount, // ou amount, dependendo da sua API
+						installmentsCount: Number(formData.installmentNumber) || 1,
+						installmentInterval: formData.installmentInterval,
+						firstDueDate: formData.date,
+						generateOccurrences: true
+					};
+					// await createInstallmentContract(payload);
+					break;
+				}
+			}
+
 			toast.success("Transação criada com sucesso.");
 			setIsOpen(false);
 			setFormData(buildInitialState(defaultDate));
@@ -238,8 +280,8 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 									<Input
 										id="date"
 										type="date"
-										value={formData.depositedDate}
-										onChange={(e) => handleChange("depositedDate", e.target.value)}
+										value={formData.date}
+										onChange={(e) => handleChange("date", e.target.value)}
 										className="pl-9"
 									/>
 								</div>
