@@ -2,7 +2,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import CellSumOnlyPopover from "./CellSumOnlyPopover";
 import ColGroup from "./ColGroup";
 import SectionTitle from "./SectionTitle";
-import { Row } from "../types";
+import { PendingEntry, Row } from "../types";
 import { formatCurrency } from "@/utils/currency-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 type EditableBlockProps = {
+  sectionId: string;
   title: string;
   months: string[];
   rows: Row[];
@@ -39,18 +40,21 @@ type EditableBlockProps = {
   onTitleCancel?: () => void;
   savingTitle?: boolean;
   hasPendingChanges?: boolean;
-  isCellPending?: (rowId: string, monthIndex: number) => boolean;
+  isCellPending?: (sectionId: string, rowId: string, monthIndex: number) => boolean;
+  getPendingEntries?: (sectionId: string, rowId: string, monthIndex: number) => PendingEntry[];
   onRegisterPendingEntry?: (payload: {
+    sectionId: string;
     rowId: string;
     rowLabel: string;
     monthIndex: number;
     monthLabel: string;
     delta: number;
   }) => void;
-  onUndoPendingEntry?: (payload: { rowId: string; monthIndex: number }) => void;
+  onUndoPendingEntry?: (payload: { sectionId: string; rowId: string; monthIndex: number }) => void;
 };
 
 export default function EditableBlock({
+  sectionId,
   title,
   months,
   rows,
@@ -73,6 +77,7 @@ export default function EditableBlock({
   savingTitle = false,
   hasPendingChanges = false,
   isCellPending,
+  getPendingEntries,
   onRegisterPendingEntry,
   onUndoPendingEntry,
 }: EditableBlockProps) {
@@ -203,7 +208,8 @@ export default function EditableBlock({
                 <TableRow key={row.id} className="hover:bg-transparent">
               <TableCell className="font-medium">{row.label.toLowerCase()}</TableCell>
               {months.map((_, mi) => {
-                const pending = isCellPending?.(row.id, mi) ?? false;
+                const pending = isCellPending?.(sectionId, row.id, mi) ?? false;
+                const pendingEntries = getPendingEntries?.(sectionId, row.id, mi) ?? [];
                 return (
                   <TableCell
                     key={mi}
@@ -219,6 +225,7 @@ export default function EditableBlock({
                             const monthLabel = months[mi] ?? `Mês ${mi + 1}`;
                             onUpdateCell(row.id, mi, (current) => (current || 0) + delta);
                             onRegisterPendingEntry?.({
+                              sectionId,
                               rowId: row.id,
                               rowLabel: row.label,
                               monthIndex: mi,
@@ -226,14 +233,14 @@ export default function EditableBlock({
                               delta,
                             });
                           }}
-                          onUndo={(delta) => {
-                            onUpdateCell(row.id, mi, (current) => Math.max(0, (current || 0) - delta));
-                            onUndoPendingEntry?.({ rowId: row.id, monthIndex: mi });
+                          onUndo={() => {
+                            onUndoPendingEntry?.({ sectionId, rowId: row.id, monthIndex: mi });
                           }}
                           compact={compact}
                           locale={locale}
                           currency={currency}
                           pending={pending}
+                          pendingEntries={pendingEntries}
                         />
                       </TableCell>
                     );

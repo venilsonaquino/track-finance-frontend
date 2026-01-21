@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import PageBreadcrumbNav from "@/components/BreadcrumbNav";
 import ReadOnlyBlock from "./components/ReadOnlyBlock";
 import EditableBlock from "./components/EditableBlock";
-import { EditableSectionState, MonthKey, SectionEditable } from "./types";
+import { EditableSectionState, MonthKey, PendingEntry, SectionEditable } from "./types";
 import ManageGroupsSheet from "./components/ManageGroupsSheet";
 import { useBudgetOverview, useBudgetGroupsCrud } from "../hooks/use-budget-group";
 import { MonthYearPicker } from "../movements/components/MonthYearPicker";
@@ -135,6 +135,8 @@ export default function BudgetPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addCategoryDialogOpen, setAddCategoryDialogOpen] = useState(false);
   const [addCategoryTarget, setAddCategoryTarget] = useState<{ id: string; title: string } | null>(null);
+  const [pendingByCell, setPendingByCell] = useState<Record<string, PendingEntry[]>>({});
+  const [draftLoaded, setDraftLoaded] = useState(false);
 
   const monthOrder = useMemo<MonthKey[]>(
     () => budgetOverview?.months ?? [],
@@ -165,9 +167,59 @@ export default function BudgetPage() {
   }, [budgetOverview, monthOrder]);
 
   useEffect(() => {
-    if (!budgetOverview) return;
-    setEditableSections(serverEditableSections);
-  }, [budgetOverview, serverEditableSections]);
+    setDraftLoaded(false);
+    setPendingByCell({});
+  }, [currentYear]);
+
+  useEffect(() => {
+    if (!budgetOverview || draftLoaded) return;
+
+    const draftKey = `budget:draft:${currentYear}`;
+    let appliedDraft = false;
+
+    try {
+      const rawDraft = localStorage.getItem(draftKey);
+      if (rawDraft) {
+        const parsed = JSON.parse(rawDraft);
+        if (parsed?.year === currentYear && Array.isArray(parsed?.editableSections)) {
+          setEditableSections(parsed.editableSections);
+          setPendingByCell(parsed.pendingByCell ?? {});
+          appliedDraft = true;
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao carregar rascunho local do orçamento:", error);
+    }
+
+    if (!appliedDraft) {
+      setEditableSections(serverEditableSections);
+      setPendingByCell({});
+    }
+
+    setDraftLoaded(true);
+  }, [budgetOverview, currentYear, draftLoaded, serverEditableSections]);
+
+  useEffect(() => {
+    if (!draftLoaded || !budgetOverview) return;
+    const draftKey = `budget:draft:${currentYear}`;
+    const handle = window.setTimeout(() => {
+      try {
+        localStorage.setItem(
+          draftKey,
+          JSON.stringify({
+            year: currentYear,
+            editableSections,
+            pendingByCell,
+            updatedAt: new Date().toISOString(),
+          })
+        );
+      } catch (error) {
+        console.error("Erro ao salvar rascunho local do orçamento:", error);
+      }
+    }, 1000);
+
+    return () => window.clearTimeout(handle);
+  }, [editableSections, pendingByCell, currentYear, draftLoaded, budgetOverview]);
 
   const emptyValuesArray = useMemo(
     () => monthOrder.map(() => 0),
@@ -209,6 +261,10 @@ export default function BudgetPage() {
     );
   }, [computedRows, monthOrder, emptyValuesArray]);
 
+  const buildCellKey = useCallback((sectionId: string, rowId: string, monthIndex: number) => {
+    return `${sectionId}:${rowId}:${monthIndex}`;
+  }, []);
+
   const updateCell = useCallback((
     sectionId: string,
     rowId: string,
@@ -233,6 +289,75 @@ export default function BudgetPage() {
       })
     );
   }, []);
+
+  const registerPendingEntry = useCallback((payload: {
+    sectionId: string;
+    rowId: string;
+    rowLabel: string;
+    monthIndex: number;
+    monthLabel: string;
+    delta: number;
+  }) => {
+    const key = buildCellKey(payload.sectionId, payload.rowId, payload.monthIndex);
+    const entry: PendingEntry = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      sectionId: payload.sectionId,
+      rowId: payload.rowId,
+      rowLabel: payload.rowLabel,
+      monthIndex: payload.monthIndex,
+      monthLabel: payload.monthLabel,
+      delta: payload.delta,
+      createdAt: new Date().toISOString(),
+    };
+
+    setPendingByCell((prev) => {
+      const existing = prev[key] ?? [];
+      const nextEntries = [entry, ...existing].slice(0, 5);
+      return { ...prev, [key]: nextEntries };
+    });
+  }, [buildCellKey]);
+
+  const undoLastPendingEntryForCell = useCallback((payload: {
+    sectionId: string;
+    rowId: string;
+    monthIndex: number;
+  }) => {
+    const key = buildCellKey(payload.sectionId, payload.rowId, payload.monthIndex);
+    let lastEntry: PendingEntry | undefined;
+
+    setPendingByCell((prev) => {
+      const entries = prev[key] ?? [];
+      if (!entries.length) return prev;
+      const [latest, ...rest] = entries;
+      lastEntry = latest;
+      const next = { ...prev };
+      if (rest.length) {
+        next[key] = rest;
+      } else {
+        delete next[key];
+      }
+      return next;
+    });
+
+    if (lastEntry) {
+      updateCell(payload.sectionId, payload.rowId, payload.monthIndex, (current) => (current || 0) - lastEntry.delta);
+    }
+  }, [buildCellKey, updateCell]);
+
+  const isCellPending = useCallback((sectionId: string, rowId: string, monthIndex: number) => {
+    const key = buildCellKey(sectionId, rowId, monthIndex);
+    return (pendingByCell[key]?.length ?? 0) > 0;
+  }, [buildCellKey, pendingByCell]);
+
+  const getPendingEntries = useCallback((sectionId: string, rowId: string, monthIndex: number) => {
+    const key = buildCellKey(sectionId, rowId, monthIndex);
+    return pendingByCell[key] ?? [];
+  }, [buildCellKey, pendingByCell]);
+
+  const hasPendingChanges = useCallback((sectionId: string) => {
+    const prefix = `${sectionId}:`;
+    return Object.keys(pendingByCell).some((key) => key.startsWith(prefix));
+  }, [pendingByCell]);
 
   const handleMonthYearChange = useCallback((nextDate: Date) => {
     setCurrentDate(nextDate);
@@ -440,6 +565,7 @@ export default function BudgetPage() {
           <Card key={section.id} className="shadow-sm w-full overflow-hidden">
             <CardContent className="space-y-6 px-3 sm:px-6">
               <EditableBlock
+                sectionId={section.id}
                 title={section.title}
                 color={section.color}
                 months={monthLabels}
@@ -461,6 +587,11 @@ export default function BudgetPage() {
                 onTitleSave={saveSectionTitle}
                 onTitleCancel={cancelEditingSection}
                 savingTitle={savingTitle && editingSectionId === section.id}
+                hasPendingChanges={hasPendingChanges(section.id)}
+                isCellPending={isCellPending}
+                getPendingEntries={getPendingEntries}
+                onRegisterPendingEntry={registerPendingEntry}
+                onUndoPendingEntry={undoLastPendingEntryForCell}
               />
               </CardContent>
           </Card>

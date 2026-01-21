@@ -9,11 +9,12 @@ import { cn } from "@/lib/utils";
 type CellSumOnlyPopoverProps = {
   value: number;
   onAdd: (delta: number) => void;
-  onUndo: (delta: number) => void;
+  onUndo: () => void;
   compact?: boolean;
   locale?: string;
   currency?: string;
   pending?: boolean;
+  pendingEntries?: Array<{ id: string; delta: number }>;
 };
 
 export default function CellSumOnlyPopover({
@@ -22,11 +23,13 @@ export default function CellSumOnlyPopover({
   onUndo,
   compact = false,
   pending = false,
+  pendingEntries = [],
+  locale,
+  currency,
 }: CellSumOnlyPopoverProps) {
   const [open, setOpen] = useState(false);
   const [temp, setTemp] = useState("");
   const [flash, setFlash] = useState<string | null>(null);
-  const [history, setHistory] = useState<number[]>([]); // histórico local por célula
 
   function parseBRDecimal(v: string) {
     const norm = v.replace(/\s/g, "").replace(/\./g, "").replace(/,/g, ".");
@@ -38,8 +41,7 @@ export default function CellSumOnlyPopover({
     const delta = parseBRDecimal(temp);
     if (delta > 0) {
       onAdd(delta);
-      setHistory((h) => [delta, ...h].slice(0, 5));
-      setFlash(`+ ${formatCurrency(delta)}`);
+      setFlash(`+ ${formatCurrency(delta, locale, currency)}`);
       setTimeout(() => setFlash(null), 900);
       setTemp("");
       setOpen(false);
@@ -47,10 +49,8 @@ export default function CellSumOnlyPopover({
   };
 
   const undoLast = () => {
-    if (!history.length) return;
-    const [last, ...rest] = history;
-    onUndo(last);
-    setHistory(rest);
+    if (!pendingEntries.length) return;
+    onUndo();
   };
 
   return (
@@ -67,7 +67,7 @@ export default function CellSumOnlyPopover({
                 ? "border-amber-300 ring-1 ring-amber-200/70 bg-amber-50/50 dark:border-amber-500/40 dark:ring-amber-500/40 dark:bg-amber-900/30"
                 : "hover:border-amber-200/70"
             )}
-            value={formatCurrency(value)}
+            value={formatCurrency(value, locale, currency)}
             placeholder="0,00"
           />
         </PopoverTrigger>
@@ -93,13 +93,13 @@ export default function CellSumOnlyPopover({
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <History className="w-3.5 h-3.5" /> últimos lançamentos
             </div>
-            {history.length === 0 ? (
+            {pendingEntries.length === 0 ? (
               <div className="text-xs text-muted-foreground mt-1">Nenhum lançamento ainda.</div>
             ) : (
               <ul className="mt-1 max-h-24 overflow-auto pr-1 space-y-1">
-                {history.map((value, i) => (
-                  <li key={i} className="text-xs flex items-center justify-between bg-muted/40 rounded px-2 py-1">
-                    <span>{formatCurrency(value)}</span>
+                {pendingEntries.map((entry, i) => (
+                  <li key={entry.id} className="text-xs flex items-center justify-between bg-muted/40 rounded px-2 py-1">
+                    <span>{formatCurrency(entry.delta, locale, currency)}</span>
                     {i === 0 && (
                       <button onClick={undoLast} className="text-[11px] underline cursor-pointer">desfazer</button>
                     )}
