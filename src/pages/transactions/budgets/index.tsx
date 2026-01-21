@@ -340,7 +340,7 @@ export default function BudgetPage() {
     });
 
     if (lastEntry) {
-      updateCell(payload.sectionId, payload.rowId, payload.monthIndex, (current) => (current || 0) - lastEntry.delta);
+      updateCell(payload.sectionId, payload.rowId, payload.monthIndex, (current) => (current || 0) - lastEntry!.delta);
     }
   }, [buildCellKey, updateCell]);
 
