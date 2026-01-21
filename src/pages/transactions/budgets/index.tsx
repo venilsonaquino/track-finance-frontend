@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import PageBreadcrumbNav from "@/components/BreadcrumbNav";
 import ReadOnlyBlock from "./components/ReadOnlyBlock";
@@ -28,6 +28,135 @@ const MONTH_LABELS_MAP: Record<MonthKey, string> = {
   Out: "Outubro",
   Nov: "Novembro",
   Dez: "Dezembro",
+};
+
+const ALLOW_NEGATIVE_VALUES = false;
+
+type DraftState = {
+  editableSections: EditableSectionState[];
+  pendingByCell: Record<string, PendingEntry[]>;
+  draftDirty: boolean;
+};
+
+type DraftAction =
+  | { type: "INIT_FROM_SERVER"; sections: EditableSectionState[] }
+  | { type: "INIT_FROM_DRAFT"; sections: EditableSectionState[]; pendingByCell: Record<string, PendingEntry[]> }
+  | { type: "SET_SECTIONS"; sections: EditableSectionState[]; markDirty?: boolean }
+  | { type: "REMOVE_SECTION"; sectionId: string }
+  | {
+      type: "ADD_DELTA";
+      payload: {
+        sectionId: string;
+        rowId: string;
+        rowLabel: string;
+        monthIndex: number;
+        monthLabel: string;
+        delta: number;
+      };
+    }
+  | { type: "UNDO_LAST_CELL"; payload: { sectionId: string; rowId: string; monthIndex: number } }
+  | { type: "DRAFT_SAVED" };
+
+const buildCellKey = (sectionId: string, rowId: string, monthIndex: number) =>
+  `${sectionId}:${rowId}:${monthIndex}`;
+
+const applyDeltaToSections = (
+  sections: EditableSectionState[],
+  payload: { sectionId: string; rowId: string; monthIndex: number },
+  delta: number
+) =>
+  sections.map((section) => {
+    if (section.id !== payload.sectionId) return section;
+    return {
+      ...section,
+      rows: section.rows.map((row) => {
+        if (row.id !== payload.rowId) return row;
+        const currentValue = row.values[payload.monthIndex] || 0;
+        const nextValue = currentValue + delta;
+        const finalValue = ALLOW_NEGATIVE_VALUES ? nextValue : Math.max(0, nextValue);
+        return {
+          ...row,
+          values: row.values.map((value, idx) => (idx === payload.monthIndex ? finalValue : value)),
+        };
+      }),
+    };
+  });
+
+const draftReducer = (state: DraftState, action: DraftAction): DraftState => {
+  switch (action.type) {
+    case "INIT_FROM_SERVER":
+      return { editableSections: action.sections, pendingByCell: {}, draftDirty: false };
+    case "INIT_FROM_DRAFT":
+      return {
+        editableSections: action.sections,
+        pendingByCell: action.pendingByCell ?? {},
+        draftDirty: false,
+      };
+    case "SET_SECTIONS":
+      return {
+        ...state,
+        editableSections: action.sections,
+        draftDirty: action.markDirty ? true : state.draftDirty,
+      };
+    case "REMOVE_SECTION": {
+      const nextSections = state.editableSections.filter((section) => section.id !== action.sectionId);
+      const prefix = `${action.sectionId}:`;
+      const nextPending = Object.keys(state.pendingByCell).reduce((acc, key) => {
+        if (!key.startsWith(prefix)) {
+          acc[key] = state.pendingByCell[key];
+        }
+        return acc;
+      }, {} as Record<string, PendingEntry[]>);
+      return {
+        editableSections: nextSections,
+        pendingByCell: nextPending,
+        draftDirty: state.draftDirty,
+      };
+    }
+    case "ADD_DELTA": {
+      const { sectionId, rowId, monthIndex, delta } = action.payload;
+      const key = buildCellKey(sectionId, rowId, monthIndex);
+      const entry: PendingEntry = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        sectionId,
+        rowId,
+        rowLabel: action.payload.rowLabel,
+        monthIndex,
+        monthLabel: action.payload.monthLabel,
+        delta,
+        createdAt: new Date().toISOString(),
+      };
+      const nextEntries = [entry, ...(state.pendingByCell[key] ?? [])].slice(0, 5);
+      return {
+        editableSections: applyDeltaToSections(state.editableSections, { sectionId, rowId, monthIndex }, delta),
+        pendingByCell: { ...state.pendingByCell, [key]: nextEntries },
+        draftDirty: true,
+      };
+    }
+    case "UNDO_LAST_CELL": {
+      const { sectionId, rowId, monthIndex } = action.payload;
+      const key = buildCellKey(sectionId, rowId, monthIndex);
+      const entries = state.pendingByCell[key] ?? [];
+      if (!entries.length) return state;
+      const [latest, ...rest] = entries;
+      const nextPending = { ...state.pendingByCell };
+      if (rest.length) {
+        nextPending[key] = rest;
+      } else {
+        delete nextPending[key];
+      }
+      return {
+        editableSections: applyDeltaToSections(state.editableSections, { sectionId, rowId, monthIndex }, -latest.delta),
+        pendingByCell: nextPending,
+        draftDirty: true,
+      };
+    }
+    case "DRAFT_SAVED":
+      if (!state.draftDirty) return state;
+      return { ...state, draftDirty: false };
+    default:
+      return state;
+  }
 };
 
 const toValuesArray = (monthOrder: MonthKey[], values: Record<MonthKey, number>) =>
@@ -125,7 +254,11 @@ export default function BudgetPage() {
   } = useBudgetGroupsCrud();
 
   const blockingError = overviewError || crudError;
-  const [editableSections, setEditableSections] = useState<EditableSectionState[]>([]);
+  const [draftState, dispatch] = useReducer(draftReducer, {
+    editableSections: [],
+    pendingByCell: {},
+    draftDirty: false,
+  });
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState("");
   const [savingTitle, setSavingTitle] = useState(false);
@@ -135,7 +268,6 @@ export default function BudgetPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addCategoryDialogOpen, setAddCategoryDialogOpen] = useState(false);
   const [addCategoryTarget, setAddCategoryTarget] = useState<{ id: string; title: string } | null>(null);
-  const [pendingByCell, setPendingByCell] = useState<Record<string, PendingEntry[]>>({});
   const [draftLoaded, setDraftLoaded] = useState(false);
 
   const monthOrder = useMemo<MonthKey[]>(
@@ -166,24 +298,43 @@ export default function BudgetPage() {
     }));
   }, [budgetOverview, monthOrder]);
 
+  const buildDraftKey = useCallback((year: number) => {
+    return `budget:draft:${year}`;
+  }, []);
+
+  const buildServerSyncKey = useCallback((year: number) => {
+    return `budget:server-sync:${year}`;
+  }, []);
+
   useEffect(() => {
     setDraftLoaded(false);
-    setPendingByCell({});
+    dispatch({ type: "INIT_FROM_SERVER", sections: [] });
   }, [currentYear]);
 
   useEffect(() => {
     if (!budgetOverview || draftLoaded) return;
 
-    const draftKey = `budget:draft:${currentYear}`;
+    const draftKey = buildDraftKey(currentYear);
+    const serverSyncKey = buildServerSyncKey(currentYear);
+    const lastServerSync = localStorage.getItem(serverSyncKey);
     let appliedDraft = false;
 
     try {
       const rawDraft = localStorage.getItem(draftKey);
       if (rawDraft) {
         const parsed = JSON.parse(rawDraft);
-        if (parsed?.year === currentYear && Array.isArray(parsed?.editableSections)) {
-          setEditableSections(parsed.editableSections);
-          setPendingByCell(parsed.pendingByCell ?? {});
+        const draftUpdatedAt = parsed?.updatedAt ? new Date(parsed.updatedAt) : null;
+        const serverSyncAt = lastServerSync ? new Date(lastServerSync) : null;
+        const shouldPreferDraft = Boolean(
+          draftUpdatedAt &&
+            (!serverSyncAt || draftUpdatedAt.getTime() > serverSyncAt.getTime())
+        );
+        if (parsed?.year === currentYear && Array.isArray(parsed?.editableSections) && shouldPreferDraft) {
+          dispatch({
+            type: "INIT_FROM_DRAFT",
+            sections: parsed.editableSections,
+            pendingByCell: parsed.pendingByCell ?? {},
+          });
           appliedDraft = true;
         }
       }
@@ -192,34 +343,50 @@ export default function BudgetPage() {
     }
 
     if (!appliedDraft) {
-      setEditableSections(serverEditableSections);
-      setPendingByCell({});
+      dispatch({ type: "INIT_FROM_SERVER", sections: serverEditableSections });
+    }
+
+    try {
+      localStorage.setItem(serverSyncKey, new Date().toISOString());
+    } catch (error) {
+      console.error("Erro ao salvar sincronismo do orçamento:", error);
     }
 
     setDraftLoaded(true);
-  }, [budgetOverview, currentYear, draftLoaded, serverEditableSections]);
+  }, [budgetOverview, currentYear, draftLoaded, serverEditableSections, buildDraftKey, buildServerSyncKey]);
 
   useEffect(() => {
     if (!draftLoaded || !budgetOverview) return;
-    const draftKey = `budget:draft:${currentYear}`;
+    const draftKey = buildDraftKey(currentYear);
     const handle = window.setTimeout(() => {
       try {
         localStorage.setItem(
           draftKey,
           JSON.stringify({
             year: currentYear,
-            editableSections,
-            pendingByCell,
+            editableSections: draftState.editableSections,
+            pendingByCell: draftState.pendingByCell,
             updatedAt: new Date().toISOString(),
           })
         );
+        dispatch({ type: "DRAFT_SAVED" });
       } catch (error) {
         console.error("Erro ao salvar rascunho local do orçamento:", error);
       }
     }, 1000);
 
     return () => window.clearTimeout(handle);
-  }, [editableSections, pendingByCell, currentYear, draftLoaded, budgetOverview]);
+  }, [draftState.editableSections, draftState.pendingByCell, currentYear, draftLoaded, budgetOverview, buildDraftKey]);
+
+  useEffect(() => {
+    if (!draftState.draftDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [draftState.draftDirty]);
 
   const emptyValuesArray = useMemo(
     () => monthOrder.map(() => 0),
@@ -228,14 +395,14 @@ export default function BudgetPage() {
 
   const totalsBySectionTitle = useMemo(() => {
     const length = monthOrder.length;
-    return editableSections.reduce((acc, section) => {
+    return draftState.editableSections.reduce((acc, section) => {
       const totals = Array.from({ length }, (_, idx) =>
         section.rows.reduce((sum, row) => sum + (row.values[idx] || 0), 0)
       );
       acc[section.title] = totals;
       return acc;
     }, {} as Partial<Record<SectionEditable["title"], number[]>>);
-  }, [editableSections, monthOrder]);
+  }, [draftState.editableSections, monthOrder]);
 
   const computedRows = useMemo(
     () =>
@@ -261,36 +428,7 @@ export default function BudgetPage() {
     );
   }, [computedRows, monthOrder, emptyValuesArray]);
 
-  const buildCellKey = useCallback((sectionId: string, rowId: string, monthIndex: number) => {
-    return `${sectionId}:${rowId}:${monthIndex}`;
-  }, []);
-
-  const updateCell = useCallback((
-    sectionId: string,
-    rowId: string,
-    monthIndex: number,
-    nextValueFactory: (current: number) => number
-  ) => {
-    setEditableSections((prev) =>
-      prev.map((section) => {
-        if (section.id !== sectionId) return section;
-        return {
-          ...section,
-          rows: section.rows.map((row) => {
-            if (row.id !== rowId) return row;
-            const currentValue = row.values[monthIndex] || 0;
-            const nextValue = nextValueFactory(currentValue);
-            return {
-              ...row,
-              values: row.values.map((value, idx) => (idx === monthIndex ? nextValue : value)),
-            };
-          }),
-        };
-      })
-    );
-  }, []);
-
-  const registerPendingEntry = useCallback((payload: {
+  const handleAddDelta = useCallback((payload: {
     sectionId: string;
     rowId: string;
     rowLabel: string;
@@ -298,66 +436,31 @@ export default function BudgetPage() {
     monthLabel: string;
     delta: number;
   }) => {
-    const key = buildCellKey(payload.sectionId, payload.rowId, payload.monthIndex);
-    const entry: PendingEntry = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      sectionId: payload.sectionId,
-      rowId: payload.rowId,
-      rowLabel: payload.rowLabel,
-      monthIndex: payload.monthIndex,
-      monthLabel: payload.monthLabel,
-      delta: payload.delta,
-      createdAt: new Date().toISOString(),
-    };
+    dispatch({ type: "ADD_DELTA", payload });
+  }, []);
 
-    setPendingByCell((prev) => {
-      const existing = prev[key] ?? [];
-      const nextEntries = [entry, ...existing].slice(0, 5);
-      return { ...prev, [key]: nextEntries };
-    });
-  }, [buildCellKey]);
-
-  const undoLastPendingEntryForCell = useCallback((payload: {
+  const handleUndoLastCell = useCallback((payload: {
     sectionId: string;
     rowId: string;
     monthIndex: number;
   }) => {
-    const key = buildCellKey(payload.sectionId, payload.rowId, payload.monthIndex);
-    let lastEntry: PendingEntry | undefined;
-
-    setPendingByCell((prev) => {
-      const entries = prev[key] ?? [];
-      if (!entries.length) return prev;
-      const [latest, ...rest] = entries;
-      lastEntry = latest;
-      const next = { ...prev };
-      if (rest.length) {
-        next[key] = rest;
-      } else {
-        delete next[key];
-      }
-      return next;
-    });
-
-    if (lastEntry) {
-      updateCell(payload.sectionId, payload.rowId, payload.monthIndex, (current) => (current || 0) - lastEntry!.delta);
-    }
-  }, [buildCellKey, updateCell]);
+    dispatch({ type: "UNDO_LAST_CELL", payload });
+  }, []);
 
   const isCellPending = useCallback((sectionId: string, rowId: string, monthIndex: number) => {
     const key = buildCellKey(sectionId, rowId, monthIndex);
-    return (pendingByCell[key]?.length ?? 0) > 0;
-  }, [buildCellKey, pendingByCell]);
+    return (draftState.pendingByCell[key]?.length ?? 0) > 0;
+  }, [draftState.pendingByCell]);
 
   const getPendingEntries = useCallback((sectionId: string, rowId: string, monthIndex: number) => {
     const key = buildCellKey(sectionId, rowId, monthIndex);
-    return pendingByCell[key] ?? [];
-  }, [buildCellKey, pendingByCell]);
+    return draftState.pendingByCell[key] ?? [];
+  }, [draftState.pendingByCell]);
 
   const hasPendingChanges = useCallback((sectionId: string) => {
     const prefix = `${sectionId}:`;
-    return Object.keys(pendingByCell).some((key) => key.startsWith(prefix));
-  }, [pendingByCell]);
+    return Object.keys(draftState.pendingByCell).some((key) => key.startsWith(prefix));
+  }, [draftState.pendingByCell]);
 
   const handleMonthYearChange = useCallback((nextDate: Date) => {
     setCurrentDate(nextDate);
@@ -374,10 +477,10 @@ export default function BudgetPage() {
   }, []);
 
   useEffect(() => {
-    if (editingSectionId && !editableSections.some((section) => section.id === editingSectionId)) {
+    if (editingSectionId && !draftState.editableSections.some((section) => section.id === editingSectionId)) {
       cancelEditingSection();
     }
-  }, [editableSections, editingSectionId, cancelEditingSection]);
+  }, [draftState.editableSections, editingSectionId, cancelEditingSection]);
 
   const handleDeleteSection = useCallback(async (section: EditableSectionState) => {
     if (section.isSystemDefault) {
@@ -393,7 +496,7 @@ export default function BudgetPage() {
     try {
       setDeletingSectionId(section.id);
       await deleteBudgetGroup(section.id);
-      setEditableSections((prev) => prev.filter(({ id }) => id !== section.id));
+      dispatch({ type: "REMOVE_SECTION", sectionId: section.id });
       toast.success("Grupo excluído com sucesso!");
       refreshCurrentBudgetOverview();
     } catch (error) {
@@ -452,13 +555,14 @@ export default function BudgetPage() {
     try {
       setSavingTitle(true);
       await renameBudgetGroup(editingSectionId, trimmedTitle);
-      setEditableSections((prev) =>
-        prev.map((section) =>
+      dispatch({
+        type: "SET_SECTIONS",
+        sections: draftState.editableSections.map((section) =>
           section.id === editingSectionId
             ? { ...section, title: trimmedTitle }
             : section
-        )
-      );
+        ),
+      });
       toast.success("Grupo atualizado com sucesso!");
       cancelEditingSection();
       refreshCurrentBudgetOverview();
@@ -468,7 +572,14 @@ export default function BudgetPage() {
     } finally {
       setSavingTitle(false);
     }
-  }, [editingSectionId, editingTitleValue, renameBudgetGroup, cancelEditingSection, refreshCurrentBudgetOverview]);
+  }, [
+    editingSectionId,
+    editingTitleValue,
+    renameBudgetGroup,
+    cancelEditingSection,
+    refreshCurrentBudgetOverview,
+    draftState.editableSections,
+  ]);
 
   const isRefreshing = loading && Boolean(budgetOverview);
 
@@ -561,7 +672,7 @@ export default function BudgetPage() {
             />
             </CardContent>
           </Card>
-          {editableSections.map((section) => (
+          {draftState.editableSections.map((section) => (
           <Card key={section.id} className="shadow-sm w-full overflow-hidden">
             <CardContent className="space-y-6 px-3 sm:px-6">
               <EditableBlock
@@ -572,9 +683,6 @@ export default function BudgetPage() {
                 rows={section.rows}
                 footerLabel={section.footerLabel}
                 footerValues={totalsBySectionTitle[section.title] ?? emptyValuesArray}
-                onUpdateCell={(rowId, monthIndex, factory) =>
-                  updateCell(section.id, rowId, monthIndex, factory)
-                }
                 locale={budgetOverview.locale}
                 currency={budgetOverview.currency}
                 onEdit={() => handleSectionAction(section, "edit")}
@@ -590,8 +698,8 @@ export default function BudgetPage() {
                 hasPendingChanges={hasPendingChanges(section.id)}
                 isCellPending={isCellPending}
                 getPendingEntries={getPendingEntries}
-                onRegisterPendingEntry={registerPendingEntry}
-                onUndoPendingEntry={undoLastPendingEntryForCell}
+                onAddDelta={handleAddDelta}
+                onUndoLastDelta={handleUndoLastCell}
               />
               </CardContent>
           </Card>

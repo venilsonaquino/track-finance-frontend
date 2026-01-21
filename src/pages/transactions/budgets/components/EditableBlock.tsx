@@ -25,7 +25,6 @@ type EditableBlockProps = {
   color?: string;
   footerLabel: string;
   footerValues: number[];
-  onUpdateCell: (rowId: string, monthIndex: number, nextValueFactory: (current: number) => number) => void;
   compact?: boolean;
   locale?: string;
   currency?: string;
@@ -42,7 +41,7 @@ type EditableBlockProps = {
   hasPendingChanges?: boolean;
   isCellPending?: (sectionId: string, rowId: string, monthIndex: number) => boolean;
   getPendingEntries?: (sectionId: string, rowId: string, monthIndex: number) => PendingEntry[];
-  onRegisterPendingEntry?: (payload: {
+  onAddDelta?: (payload: {
     sectionId: string;
     rowId: string;
     rowLabel: string;
@@ -50,7 +49,7 @@ type EditableBlockProps = {
     monthLabel: string;
     delta: number;
   }) => void;
-  onUndoPendingEntry?: (payload: { sectionId: string; rowId: string; monthIndex: number }) => void;
+  onUndoLastDelta?: (payload: { sectionId: string; rowId: string; monthIndex: number }) => void;
 };
 
 export default function EditableBlock({
@@ -61,7 +60,6 @@ export default function EditableBlock({
   color,
   footerLabel,
   footerValues,
-  onUpdateCell,
   compact = false,
   locale,
   currency,
@@ -78,8 +76,8 @@ export default function EditableBlock({
   hasPendingChanges = false,
   isCellPending,
   getPendingEntries,
-  onRegisterPendingEntry,
-  onUndoPendingEntry,
+  onAddDelta,
+  onUndoLastDelta,
 }: EditableBlockProps) {
 
   const hasActions = Boolean(onEdit || onDelete || onAddCategory);
@@ -223,8 +221,7 @@ export default function EditableBlock({
                           value={row.values[mi] || 0}
                           onAdd={(delta) => {
                             const monthLabel = months[mi] ?? `Mês ${mi + 1}`;
-                            onUpdateCell(row.id, mi, (current) => (current || 0) + delta);
-                            onRegisterPendingEntry?.({
+                            onAddDelta?.({
                               sectionId,
                               rowId: row.id,
                               rowLabel: row.label,
@@ -234,7 +231,7 @@ export default function EditableBlock({
                             });
                           }}
                           onUndo={() => {
-                            onUndoPendingEntry?.({ sectionId, rowId: row.id, monthIndex: mi });
+                            onUndoLastDelta?.({ sectionId, rowId: row.id, monthIndex: mi });
                           }}
                           compact={compact}
                           locale={locale}
