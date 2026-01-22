@@ -2,7 +2,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import CellSumOnlyPopover from "./CellSumOnlyPopover";
 import ColGroup from "./ColGroup";
 import SectionTitle from "./SectionTitle";
-import { Row } from "../types";
+import { PendingEntry, Row } from "../types";
 import { formatCurrency } from "@/utils/currency-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,13 +18,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 type EditableBlockProps = {
+  sectionId: string;
   title: string;
   months: string[];
   rows: Row[];
   color?: string;
   footerLabel: string;
   footerValues: number[];
-  onUpdateCell: (rowId: string, monthIndex: number, nextValueFactory: (current: number) => number) => void;
   compact?: boolean;
   locale?: string;
   currency?: string;
@@ -39,25 +39,27 @@ type EditableBlockProps = {
   onTitleCancel?: () => void;
   savingTitle?: boolean;
   hasPendingChanges?: boolean;
-  isCellPending?: (rowId: string, monthIndex: number) => boolean;
-  onRegisterPendingEntry?: (payload: {
+  isCellPending?: (sectionId: string, rowId: string, monthIndex: number) => boolean;
+  getPendingEntries?: (sectionId: string, rowId: string, monthIndex: number) => PendingEntry[];
+  onAddDelta?: (payload: {
+    sectionId: string;
     rowId: string;
     rowLabel: string;
     monthIndex: number;
     monthLabel: string;
     delta: number;
   }) => void;
-  onUndoPendingEntry?: (payload: { rowId: string; monthIndex: number }) => void;
+  onUndoLastDelta?: (payload: { sectionId: string; rowId: string; monthIndex: number }) => void;
 };
 
 export default function EditableBlock({
+  sectionId,
   title,
   months,
   rows,
   color,
   footerLabel,
   footerValues,
-  onUpdateCell,
   compact = false,
   locale,
   currency,
@@ -73,8 +75,9 @@ export default function EditableBlock({
   savingTitle = false,
   hasPendingChanges = false,
   isCellPending,
-  onRegisterPendingEntry,
-  onUndoPendingEntry,
+  getPendingEntries,
+  onAddDelta,
+  onUndoLastDelta,
 }: EditableBlockProps) {
 
   const hasActions = Boolean(onEdit || onDelete || onAddCategory);
@@ -203,7 +206,8 @@ export default function EditableBlock({
                 <TableRow key={row.id} className="hover:bg-transparent">
               <TableCell className="font-medium">{row.label.toLowerCase()}</TableCell>
               {months.map((_, mi) => {
-                const pending = isCellPending?.(row.id, mi) ?? false;
+                const pending = isCellPending?.(sectionId, row.id, mi) ?? false;
+                const pendingEntries = getPendingEntries?.(sectionId, row.id, mi) ?? [];
                 return (
                   <TableCell
                     key={mi}
@@ -217,8 +221,8 @@ export default function EditableBlock({
                           value={row.values[mi] || 0}
                           onAdd={(delta) => {
                             const monthLabel = months[mi] ?? `Mês ${mi + 1}`;
-                            onUpdateCell(row.id, mi, (current) => (current || 0) + delta);
-                            onRegisterPendingEntry?.({
+                            onAddDelta?.({
+                              sectionId,
                               rowId: row.id,
                               rowLabel: row.label,
                               monthIndex: mi,
@@ -226,14 +230,14 @@ export default function EditableBlock({
                               delta,
                             });
                           }}
-                          onUndo={(delta) => {
-                            onUpdateCell(row.id, mi, (current) => Math.max(0, (current || 0) - delta));
-                            onUndoPendingEntry?.({ rowId: row.id, monthIndex: mi });
+                          onUndo={() => {
+                            onUndoLastDelta?.({ sectionId, rowId: row.id, monthIndex: mi });
                           }}
                           compact={compact}
                           locale={locale}
                           currency={currency}
                           pending={pending}
+                          pendingEntries={pendingEntries}
                         />
                       </TableCell>
                     );

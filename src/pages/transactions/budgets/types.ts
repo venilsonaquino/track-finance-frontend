@@ -4,6 +4,17 @@ export type Row = {
   values: number[]; // 12 meses
 };
 
+export type PendingEntry = {
+  id: string;
+  sectionId: string;
+  rowId: string;
+  rowLabel: string;
+  monthIndex: number;
+  monthLabel: string;
+  delta: number;
+  createdAt: string;
+};
+
 export type EditableSectionState = {
   id: string;
   color?: string;
