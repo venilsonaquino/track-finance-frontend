@@ -1,9 +1,10 @@
+import Authentication from '@/pages/authentication'
 import { lazy } from 'react'
 import { Navigate, RouteProps } from 'react-router-dom'
 
 const Login = lazy(() => import('@/pages/authentication/Login'))
-const Error404 = lazy(() => import('@/pages/authentication/Error404'))
-const Error500 = lazy(() => import('@/pages/authentication/Error500'))
+const Error404 = lazy(() => import('@/pages/erros/Error404'))
+const Error500 = lazy(() => import('@/pages/erros/Error500'))
 const Dashboard = lazy(() => import('@/pages/dashboard'))
 
 const WorkTimeExpense = lazy(() => import('@/pages/work-time-expense'))
@@ -36,7 +37,7 @@ const authRoutes: RoutesProps[] = [
 	{
 		path: '/auth/login',
 		name: 'Login',
-		element: <Login />,
+		element: <Authentication />,
 	},
 	{
 		path: '/auth/auth-404',
