@@ -49,7 +49,7 @@ HttpClient.interceptors.response.use(
         if (
             error.response?.status === 401 &&
             !originalRequest._retry &&
-            originalRequest.url !== '/auth/login' &&
+            originalRequest.url !== '/auth' &&
             originalRequest.url !== '/auth/refresh-token' &&
             hasCookie(authSessionKey)
         ) {
@@ -81,7 +81,7 @@ HttpClient.interceptors.response.use(
                 if (hasCookie(authSessionKey)) {
                     setCookie(authSessionKey, '', { maxAge: 0 });
                 }
-                window.location.href = '/auth/login';
+                window.location.href = '/auth';
                 return Promise.reject(refreshError);
             }
         }
@@ -91,7 +91,7 @@ HttpClient.interceptors.response.use(
             if (hasCookie(authSessionKey)) {
                 setCookie(authSessionKey, '', { maxAge: 0 });
             }
-            window.location.href = '/auth/login';
+            window.location.href = '/auth';
             return Promise.reject(error);
         }
         

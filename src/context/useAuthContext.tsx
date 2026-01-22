@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react'
 import { deleteCookie, hasCookie, setCookie, getCookie } from 'cookies-next'
-import { LoginResponse } from '@/api/dtos/auth/login/loginResponse'
+import { LoginResponse } from '@/api/dtos/auth/loginResponse'
 import { AuthService } from '@/api/services/authService'
 
 

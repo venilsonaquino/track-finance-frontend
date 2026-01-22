@@ -33,7 +33,7 @@ const TopNavbar = () => {
         });
         // setTimeout para garantir que o logout seja efetuado antes de redirecionar para a página de login
         setTimeout(() => {
-            navigate('/auth/login');
+            navigate('/auth');
         }, 100);
     };
 

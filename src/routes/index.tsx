@@ -35,7 +35,7 @@ const dashboardRoutes: RoutesProps[] = [
 
 const authRoutes: RoutesProps[] = [
 	{
-		path: '/auth/login',
+		path: '/auth',
 		name: 'Login',
 		element: <Authentication />,
 	},
