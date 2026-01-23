@@ -28,6 +28,7 @@ import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { IntervalType } from "@/types/Interval-type ";
 import { DateUtils } from "@/utils/date-utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 
 type TransactionType = "income" | "expense";
 
@@ -114,7 +115,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			return;
 		}
 
-		const amountValue = Number(formData.amount);
+		const amountValue = parseCurrencyInput(formData.amount);
 		if (Number.isNaN(amountValue)) {
 			toast.error("Informe um valor válido.");
 			return;
@@ -193,12 +194,11 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 								<Label htmlFor="amount">Valor</Label>
 								<Input
 									id="amount"
-									type="number"
-									step="0.01"
+									type="text"
 									inputMode="decimal"
 									placeholder="0,00"
 									value={formData.amount}
-									onChange={(e) => handleChange("amount", e.target.value)}
+									onChange={(e) => handleChange("amount", maskCurrencyInput(e.target.value))}
 								/>
 							</div>
 							<div className="space-y-2">

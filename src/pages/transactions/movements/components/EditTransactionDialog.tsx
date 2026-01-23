@@ -28,6 +28,7 @@ import { useTransactions } from "../../hooks/use-transactions";
 import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 
 type TransactionType = "income" | "expense";
 
@@ -82,10 +83,11 @@ const buildInitialState = (transaction: TransactionResponse | null): FormState =
 	}
 
 	const amountValue = Number(transaction.amount);
+	const amountCents = Number.isNaN(amountValue) ? 0 : Math.round(Math.abs(amountValue) * 100);
 
 	return {
 		description: transaction.description || "",
-		amount: Number.isNaN(amountValue) ? "" : Math.abs(amountValue).toString(),
+		amount: Number.isNaN(amountValue) ? "" : maskCurrencyInput(amountCents.toString()),
 		depositedDate: parseDepositedDate(transaction.depositedDate),
 		walletId: transaction.wallet?.id || "",
 		categoryId: transaction.category?.id || "",
@@ -164,7 +166,7 @@ export const EditTransactionDialog = ({
 			return;
 		}
 
-		const amountValue = Number(formData.amount);
+		const amountValue = parseCurrencyInput(formData.amount);
 		if (Number.isNaN(amountValue)) {
 			toast.error("Informe um valor válido.");
 			return;
@@ -239,12 +241,11 @@ export const EditTransactionDialog = ({
 								<Label htmlFor="amount">Valor</Label>
 								<Input
 									id="amount"
-									type="number"
-									step="0.01"
+									type="text"
 									inputMode="decimal"
 									placeholder="0,00"
 									value={formData.amount}
-									onChange={(e) => handleChange("amount", e.target.value)}
+									onChange={(e) => handleChange("amount", maskCurrencyInput(e.target.value))}
 								/>
 							</div>
 							<div className="space-y-2">
