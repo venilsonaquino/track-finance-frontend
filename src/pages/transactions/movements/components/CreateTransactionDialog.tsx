@@ -46,9 +46,6 @@ type InstallmentItem = {
 };
 
 const MAX_AMOUNT = 9_999_999_999.99;
-const MAX_INTEGER_DIGITS = 10;
-const MAX_CENTS_DIGITS = 2;
-const MAX_TOTAL_DIGITS = MAX_INTEGER_DIGITS + MAX_CENTS_DIGITS;
 
 const addInterval = (date: Date, interval: IntervalType, step: number) => {
 	const nextDate = new Date(date);
@@ -185,14 +182,8 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 		}));
 	};
 
-	const maskCurrencyWithLimit = (nextValue: string) => {
-		const digitsOnly = nextValue.replace(/\D/g, "");
-		const limitedDigits = digitsOnly.slice(0, MAX_TOTAL_DIGITS);
-		return maskCurrencyInput(limitedDigits);
-	};
-
 	const handleAmountChange = (nextValue: string) => {
-		const maskedValue = maskCurrencyWithLimit(nextValue);
+		const maskedValue = maskCurrencyInput(nextValue);
 		const parsedValue = parseCurrencyInput(maskedValue);
 		const isOverMax = Number.isFinite(parsedValue) && parsedValue > MAX_AMOUNT;
 
@@ -207,7 +198,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 	};
 
 	const handleAmountBlur = () => {
-		const maskedValue = maskCurrencyWithLimit(formData.amount);
+		const maskedValue = maskCurrencyInput(formData.amount);
 		const parsedValue = parseCurrencyInput(maskedValue);
 		const isOverMax = Number.isFinite(parsedValue) && parsedValue > MAX_AMOUNT;
 
@@ -387,7 +378,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 							/>
 						</div>
 
-						<div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 							<div className="space-y-2">
 								<Label htmlFor="amount">{formData.isInstallment ? "Valor total" : "Valor"}</Label>
 								<div className={formData.isInstallment ? "flex flex-col sm:flex-row sm:items-center gap-2 w-full min-w-0" : ""}>
@@ -400,7 +391,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 										onChange={(e) => handleAmountChange(e.target.value)}
 										onBlur={handleAmountBlur}
 									/>
-									{formData.isInstallment && (
+									{/* {formData.isInstallment && (
 										<div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full min-w-0">
 											<Select
 												value={formData.installmentNumber}
@@ -431,7 +422,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 												)}
 											</div>
 										</div>
-									)}
+									)} */}
 								</div>
 								{amountOverMax && (
 									<p className="text-xs text-destructive">
@@ -439,78 +430,6 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 									</p>
 								)}
 							</div>
-							<div className="space-y-2">
-								<Label htmlFor="date">Data</Label>
-								<div className="relative">
-									<Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-									<Input
-										id="date"
-										type="date"
-										value={formData.depositedDate}
-										onChange={(e) => handleChange("depositedDate", e.target.value)}
-										className="pl-9"
-									/>
-								</div>
-							</div>
-						</div>
-
-						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-							<div className="space-y-2">
-								<Label>Carteira</Label>
-								<Select
-									value={formData.walletId || undefined}
-									onValueChange={(value) => handleChange("walletId", value)}
-									disabled={walletsLoading}
-								>
-									<SelectTrigger>
-										<SelectValue placeholder="Selecione uma carteira" />
-									</SelectTrigger>
-									<SelectContent>
-										{walletsLoading ? (
-											<SelectItem value="loading" disabled>Carregando...</SelectItem>
-										) : wallets.length === 0 ? (
-											<SelectItem value="empty" disabled>Nenhuma carteira encontrada</SelectItem>
-										) : (
-											wallets.map(wallet => (
-												<SelectItem key={wallet.id} value={wallet.id!}>
-													{wallet.name}
-												</SelectItem>
-											))
-										)}
-									</SelectContent>
-								</Select>
-							</div>
-							<div className="space-y-2">
-								<Label>Categoria</Label>
-								<Select
-									value={formData.categoryId || undefined}
-									onValueChange={(value) => handleChange("categoryId", value)}
-									disabled={categoriesLoading}
-								>
-									<SelectTrigger>
-										<SelectValue placeholder="Selecione uma categoria" />
-									</SelectTrigger>
-									<SelectContent>
-										{categoriesLoading ? (
-											<SelectItem value="loading" disabled>Carregando...</SelectItem>
-										) : categories.length === 0 ? (
-											<SelectItem value="empty" disabled>Nenhuma categoria encontrada</SelectItem>
-										) : (
-											categories.map(category => (
-												<SelectItem key={category.id} value={category.id}>
-													<div className="flex items-center gap-2">
-														<span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: category.color }} />
-														{category.name}
-													</div>
-												</SelectItem>
-											))
-										)}
-									</SelectContent>
-								</Select>
-							</div>
-						</div>
-
-						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 							<div className="space-y-2 shrink-0">
 								<Label>Tipo</Label>
 								<div className="grid grid-cols-2 gap-2">
@@ -534,7 +453,109 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 									</Button>
 								</div>
 							</div>
+						</div>
 
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+							<div className="space-y-2">
+								<Label htmlFor="date">Data</Label>
+								<div className="relative">
+									<Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+									<Input
+										id="date"
+										type="date"
+										value={formData.depositedDate}
+										onChange={(e) => handleChange("depositedDate", e.target.value)}
+										className="pl-9"
+									/>
+								</div>
+							</div>
+						</div>
+
+<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+  <div className="space-y-2 min-w-0">
+    <Label>Categoria</Label>
+    <Select
+      value={formData.categoryId || undefined}
+      onValueChange={(value) => handleChange("categoryId", value)}
+      disabled={categoriesLoading}
+    >
+      <SelectTrigger className="w-full h-10">
+        <SelectValue placeholder="Selecione uma categoria" />
+      </SelectTrigger>
+
+      <SelectContent>
+        {categoriesLoading ? (
+          <SelectItem value="loading" disabled>Carregando...</SelectItem>
+        ) : categories.length === 0 ? (
+          <SelectItem value="empty" disabled>Nenhuma categoria encontrada</SelectItem>
+        ) : (
+          categories.map(category => (
+            <SelectItem key={category.id} value={category.id}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: category.color }}
+                />
+                <span className="truncate">{category.name}</span>
+              </div>
+            </SelectItem>
+          ))
+        )}
+      </SelectContent>
+    </Select>
+  </div>
+
+  <div className="space-y-2 min-w-0">
+    <Label>Carteira</Label>
+    <Select
+      value={formData.walletId || undefined}
+      onValueChange={(value) => handleChange("walletId", value)}
+      disabled={walletsLoading}
+    >
+      <SelectTrigger className="w-full h-10">
+        <SelectValue placeholder="Selecione uma carteira" />
+      </SelectTrigger>
+
+      <SelectContent>
+        {walletsLoading ? (
+          <SelectItem value="loading" disabled>Carregando...</SelectItem>
+        ) : wallets.length === 0 ? (
+          <SelectItem value="empty" disabled>Nenhuma carteira encontrada</SelectItem>
+        ) : (
+          wallets.map(wallet => (
+            <SelectItem key={wallet.id} value={wallet.id!}>
+              <span className="truncate">{wallet.name}</span>
+            </SelectItem>
+          ))
+        )}
+      </SelectContent>
+    </Select>
+  </div>
+</div>
+
+						<div className="space-y-1">
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<Label className="cursor-default">Afetar saldo da carteira?</Label>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												className="h-7 w-7 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground"
+											>
+												<Info className="h-4 w-4" />
+											</button>
+										</TooltipTrigger>
+										<TooltipContent side="top">
+											Se desativado, essa transação será registrada apenas para controle e não alterará seu saldo.
+										</TooltipContent>
+									</Tooltip>
+								</div>
+								<Switch
+									checked={formData.affectBalance}
+									onCheckedChange={(checked) => handleChange("affectBalance", checked)}
+								/>
+							</div>
 						</div>
 
 						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -590,33 +611,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 								</Select>
 							</div>
 						)}
-
-						<div className="space-y-1">
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<Label className="cursor-default">Afetar saldo da carteira?</Label>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<button
-												type="button"
-												className="h-7 w-7 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground"
-											>
-												<Info className="h-4 w-4" />
-											</button>
-										</TooltipTrigger>
-										<TooltipContent side="top">
-											Se desativado, essa transação será registrada apenas para controle e não alterará seu saldo.
-										</TooltipContent>
-									</Tooltip>
-								</div>
-								<Switch
-									checked={formData.affectBalance}
-									onCheckedChange={(checked) => handleChange("affectBalance", checked)}
-								/>
-							</div>
-						</div>
 					</div>
-
 
 					<DialogFooter className="gap-3 border-t pt-4">
 						<Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
