@@ -391,38 +391,6 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 										onChange={(e) => handleAmountChange(e.target.value)}
 										onBlur={handleAmountBlur}
 									/>
-									{/* {formData.isInstallment && (
-										<div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full min-w-0">
-											<Select
-												value={formData.installmentNumber}
-												onValueChange={(value) => handleChange("installmentNumber", value)}
-											>
-												<SelectTrigger className="w-[88px] min-w-[88px] flex-shrink-0">
-													<SelectValue placeholder="2" />
-												</SelectTrigger>
-												<SelectContent>
-													{Array.from({ length: 23 }, (_, index) => index + 2).map(count => (
-														<SelectItem key={count} value={String(count)}>
-															{count}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-											<div className="flex items-center min-w-0 gap-1 w-full sm:w-auto">
-												<span className="min-w-0 max-w-[180px] truncate text-sm text-muted-foreground">
-													{installmentPreview.canShow ? installmentPreview.summary : "—"}
-												</span>
-												{installmentPreview.canShow && (
-													<InstallmentDetails
-														open={isInstallmentDetailsOpen}
-														onOpenChange={setIsInstallmentDetailsOpen}
-														items={installmentPreview.items}
-														totalAmount={installmentPreview.totalAmount}
-													/>
-												)}
-											</div>
-										</div>
-									)} */}
 								</div>
 								{amountOverMax && (
 									<p className="text-xs text-destructive">
@@ -471,90 +439,65 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 							</div>
 						</div>
 
-<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-  <div className="space-y-2 min-w-0">
-    <Label>Categoria</Label>
-    <Select
-      value={formData.categoryId || undefined}
-      onValueChange={(value) => handleChange("categoryId", value)}
-      disabled={categoriesLoading}
-    >
-      <SelectTrigger className="w-full h-10">
-        <SelectValue placeholder="Selecione uma categoria" />
-      </SelectTrigger>
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+							<div className="space-y-2 min-w-0">
+								<Label>Categoria</Label>
+								<Select
+									value={formData.categoryId || undefined}
+									onValueChange={(value) => handleChange("categoryId", value)}
+									disabled={categoriesLoading}
+								>
+									<SelectTrigger className="w-full h-10">
+										<SelectValue placeholder="Selecione uma categoria" />
+									</SelectTrigger>
 
-      <SelectContent>
-        {categoriesLoading ? (
-          <SelectItem value="loading" disabled>Carregando...</SelectItem>
-        ) : categories.length === 0 ? (
-          <SelectItem value="empty" disabled>Nenhuma categoria encontrada</SelectItem>
-        ) : (
-          categories.map(category => (
-            <SelectItem key={category.id} value={category.id}>
-              <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: category.color }}
-                />
-                <span className="truncate">{category.name}</span>
-              </div>
-            </SelectItem>
-          ))
-        )}
-      </SelectContent>
-    </Select>
-  </div>
+									<SelectContent>
+										{categoriesLoading ? (
+											<SelectItem value="loading" disabled>Carregando...</SelectItem>
+										) : categories.length === 0 ? (
+											<SelectItem value="empty" disabled>Nenhuma categoria encontrada</SelectItem>
+										) : (
+											categories.map(category => (
+												<SelectItem key={category.id} value={category.id}>
+													<div className="flex items-center gap-2 min-w-0">
+														<span
+															className="w-2.5 h-2.5 rounded-full shrink-0"
+															style={{ backgroundColor: category.color }}
+														/>
+														<span className="truncate">{category.name}</span>
+													</div>
+												</SelectItem>
+											))
+										)}
+									</SelectContent>
+								</Select>
+							</div>
 
-  <div className="space-y-2 min-w-0">
-    <Label>Carteira</Label>
-    <Select
-      value={formData.walletId || undefined}
-      onValueChange={(value) => handleChange("walletId", value)}
-      disabled={walletsLoading}
-    >
-      <SelectTrigger className="w-full h-10">
-        <SelectValue placeholder="Selecione uma carteira" />
-      </SelectTrigger>
+							<div className="space-y-2 min-w-0">
+								<Label>Carteira</Label>
+								<Select
+									value={formData.walletId || undefined}
+									onValueChange={(value) => handleChange("walletId", value)}
+									disabled={walletsLoading}
+								>
+									<SelectTrigger className="w-full h-10">
+										<SelectValue placeholder="Selecione uma carteira" />
+									</SelectTrigger>
 
-      <SelectContent>
-        {walletsLoading ? (
-          <SelectItem value="loading" disabled>Carregando...</SelectItem>
-        ) : wallets.length === 0 ? (
-          <SelectItem value="empty" disabled>Nenhuma carteira encontrada</SelectItem>
-        ) : (
-          wallets.map(wallet => (
-            <SelectItem key={wallet.id} value={wallet.id!}>
-              <span className="truncate">{wallet.name}</span>
-            </SelectItem>
-          ))
-        )}
-      </SelectContent>
-    </Select>
-  </div>
-</div>
-
-						<div className="space-y-1">
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<Label className="cursor-default">Afetar saldo da carteira?</Label>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<button
-												type="button"
-												className="h-7 w-7 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground"
-											>
-												<Info className="h-4 w-4" />
-											</button>
-										</TooltipTrigger>
-										<TooltipContent side="top">
-											Se desativado, essa transação será registrada apenas para controle e não alterará seu saldo.
-										</TooltipContent>
-									</Tooltip>
-								</div>
-								<Switch
-									checked={formData.affectBalance}
-									onCheckedChange={(checked) => handleChange("affectBalance", checked)}
-								/>
+									<SelectContent>
+										{walletsLoading ? (
+											<SelectItem value="loading" disabled>Carregando...</SelectItem>
+										) : wallets.length === 0 ? (
+											<SelectItem value="empty" disabled>Nenhuma carteira encontrada</SelectItem>
+										) : (
+											wallets.map(wallet => (
+												<SelectItem key={wallet.id} value={wallet.id!}>
+													<span className="truncate">{wallet.name}</span>
+												</SelectItem>
+											))
+										)}
+									</SelectContent>
+								</Select>
 							</div>
 						</div>
 
@@ -611,6 +554,65 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 								</Select>
 							</div>
 						)}
+
+						{formData.isInstallment && (
+							<div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full min-w-0">
+								<Select
+									value={formData.installmentNumber}
+									onValueChange={(value) => handleChange("installmentNumber", value)}
+								>
+									<SelectTrigger className="w-[88px] min-w-[88px] flex-shrink-0">
+										<SelectValue placeholder="2" />
+									</SelectTrigger>
+									<SelectContent>
+										{Array.from({ length: 23 }, (_, index) => index + 2).map(count => (
+											<SelectItem key={count} value={String(count)}>
+												{count}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+								<div className="flex items-center min-w-0 gap-1 w-full sm:w-auto">
+									<span className="min-w-0 max-w-[180px] truncate text-sm text-muted-foreground">
+										{installmentPreview.canShow ? installmentPreview.summary : "—"}
+									</span>
+									{installmentPreview.canShow && (
+										<InstallmentDetails
+											open={isInstallmentDetailsOpen}
+											onOpenChange={setIsInstallmentDetailsOpen}
+											items={installmentPreview.items}
+											totalAmount={installmentPreview.totalAmount}
+										/>
+									)}
+								</div>
+							</div>
+						)}
+
+						<div className="space-y-1">
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<Label className="cursor-default">Afetar saldo da carteira?</Label>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												className="h-7 w-7 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground"
+											>
+												<Info className="h-4 w-4" />
+											</button>
+										</TooltipTrigger>
+										<TooltipContent side="top">
+											Se desativado, essa transação será registrada apenas para controle e não alterará seu saldo.
+										</TooltipContent>
+									</Tooltip>
+								</div>
+								<Switch
+									checked={formData.affectBalance}
+									onCheckedChange={(checked) => handleChange("affectBalance", checked)}
+								/>
+							</div>
+						</div>
+
 					</div>
 
 					<DialogFooter className="gap-3 border-t pt-4">
