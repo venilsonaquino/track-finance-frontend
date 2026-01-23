@@ -27,6 +27,7 @@ import { IntervalType } from "@/types/Interval-type ";
 import { DateUtils } from "@/utils/date-utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 import { createMovement } from "@/features/movements/services/movementService";
 import { calculateInstallmentAmount } from "@/features/movements/mappers/amountUtils";
@@ -149,6 +150,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 	const [isOpen, setIsOpen] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isInstallmentDetailsOpen, setIsInstallmentDetailsOpen] = useState(false);
+	const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 	const [formData, setFormData] = useState(() => buildInitialState(defaultDate));
 	const [amountOverMax, setAmountOverMax] = useState(false);
 
@@ -351,6 +353,9 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 		}
 	};
 
+	const shouldKeepAdvancedOpen = formData.isRecurring || formData.isInstallment;
+	const advancedOpen = isAdvancedOpen || shouldKeepAdvancedOpen;
+
 	return (
 		<Dialog open={isOpen} onOpenChange={setIsOpen}>
 			<DialogTrigger asChild>
@@ -503,131 +508,6 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 							</div>
 						</div>
 
-						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-							<div className="flex items-center justify-between rounded-lg border p-3">
-								<div className="flex items-center gap-3">
-									<PiggyBank className="h-4 w-4 text-muted-foreground" />
-									<div className="space-y-0.5">
-										<p className="text-sm font-medium">Transação fixa</p>
-										<p className="text-xs text-muted-foreground">Repete todos os períodos</p>
-									</div>
-								</div>
-								<Switch
-									checked={formData.isRecurring}
-									onCheckedChange={handleToggleRecurring}
-								/>
-							</div>
-
-							<div className="flex items-center justify-between rounded-lg border p-3">
-								<div className="flex items-center gap-3">
-									<Layers className="h-4 w-4 text-muted-foreground" />
-									<div className="space-y-0.5">
-										<p className="text-sm font-medium">Parcelado</p>
-										<p className="text-xs text-muted-foreground">Dividido em várias vezes</p>
-									</div>
-								</div>
-								<Switch
-									checked={formData.isInstallment}
-									onCheckedChange={handleToggleInstallment}
-								/>
-							</div>
-						</div>
-
-						{formData.isRecurring && (
-							<div className="space-y-3 rounded-lg border bg-muted/20 p-4">
-								<div>
-									<p className="text-sm font-medium">Transacao fixa</p>
-									<p className="text-xs text-muted-foreground">Defina com que frequencia a transacao se repete</p>
-								</div>
-								<div className="flex items-center gap-2">
-									<Label className="text-xs text-muted-foreground">Intervalo</Label>
-									<Select
-										value={formData.installmentInterval || undefined}
-										onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
-									>
-										<SelectTrigger className="h-9">
-											<SelectValue placeholder="Selecione o intervalo" />
-										</SelectTrigger>
-										<SelectContent>
-											{intervalOptions.map(option => (
-												<SelectItem key={option.value} value={option.value || ""}>
-													<div className="flex items-center gap-2">
-														<Timer className="h-4 w-4 text-muted-foreground" />
-														{option.label}
-													</div>
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</div>
-							</div>
-						)}
-
-						{formData.isInstallment && (
-							<div className="space-y-3 rounded-lg border bg-muted/20 p-4">
-								<div className="flex items-center justify-between">
-									<div>
-										<p className="text-sm font-medium">Parcelamento</p>
-										<p className="text-xs text-muted-foreground">Resumo das parcelas</p>
-									</div>
-								</div>
-								<div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full min-w-0">
-									<div className="flex items-center gap-2">
-										<Label className="text-xs text-muted-foreground">Parcelas</Label>
-										<Select
-											value={formData.installmentNumber}
-											onValueChange={(value) => handleChange("installmentNumber", value)}
-										>
-											<SelectTrigger className="w-[88px] min-w-[88px] h-9 flex-shrink-0">
-												<SelectValue placeholder="2" />
-											</SelectTrigger>
-											<SelectContent>
-												{Array.from({ length: 23 }, (_, index) => index + 2).map(count => (
-													<SelectItem key={count} value={String(count)}>
-														{count}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-									<div className="flex items-center min-w-0 gap-1 w-full sm:w-auto">
-										<span className="min-w-0 max-w-[200px] truncate text-sm text-muted-foreground">
-											{installmentPreview.canShow ? installmentPreview.summary : "—"}
-										</span>
-									</div>
-									<div className="flex items-center gap-2">
-										<Label className="text-xs text-muted-foreground">Intervalo</Label>
-										<Select
-											value={formData.installmentInterval || undefined}
-											onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
-										>
-											<SelectTrigger className="h-9">
-												<SelectValue placeholder="Mensal" />
-											</SelectTrigger>
-											<SelectContent>
-												{intervalOptions.map(option => (
-													<SelectItem key={option.value} value={option.value || ""}>
-														<div className="flex items-center gap-2">
-															<Timer className="h-4 w-4 text-muted-foreground" />
-															{option.label}
-														</div>
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</div>
-									{installmentPreview.canShow && (
-										<InstallmentDetails
-											open={isInstallmentDetailsOpen}
-											onOpenChange={setIsInstallmentDetailsOpen}
-											items={installmentPreview.items}
-											totalAmount={installmentPreview.totalAmount}
-										/>
-									)}
-								</div>
-							</div>
-						)}
-
 						<div className="space-y-1">
 							<div className="flex items-center justify-between">
 								<div className="flex items-center gap-2">
@@ -652,6 +532,145 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 								/>
 							</div>
 						</div>
+
+						<Collapsible open={advancedOpen} onOpenChange={setIsAdvancedOpen}>
+							<div className="space-y-3">
+								<CollapsibleTrigger asChild>
+									<button
+										type="button"
+										className="text-sm text-muted-foreground hover:text-foreground"
+									>
+										▸ Opções avançadas
+									</button>
+								</CollapsibleTrigger>
+								<CollapsibleContent className="space-y-4">
+									<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+										<div className="flex items-center justify-between rounded-lg border p-3">
+											<div className="flex items-center gap-3">
+												<PiggyBank className="h-4 w-4 text-muted-foreground" />
+												<div className="space-y-0.5">
+													<p className="text-sm font-medium">Transação fixa</p>
+													<p className="text-xs text-muted-foreground">Repete todos os períodos</p>
+												</div>
+											</div>
+											<Switch
+												checked={formData.isRecurring}
+												onCheckedChange={handleToggleRecurring}
+											/>
+										</div>
+
+										<div className="flex items-center justify-between rounded-lg border p-3">
+											<div className="flex items-center gap-3">
+												<Layers className="h-4 w-4 text-muted-foreground" />
+												<div className="space-y-0.5">
+													<p className="text-sm font-medium">Parcelado</p>
+													<p className="text-xs text-muted-foreground">Dividido em várias vezes</p>
+												</div>
+											</div>
+											<Switch
+												checked={formData.isInstallment}
+												onCheckedChange={handleToggleInstallment}
+											/>
+										</div>
+									</div>
+
+									{formData.isRecurring && (
+										<div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+											<div>
+												<p className="text-sm font-medium">Transação fixa</p>
+												<p className="text-xs text-muted-foreground">Defina com que frequência a transação se repete</p>
+											</div>
+											<div className="flex items-center gap-2">
+												<Label className="text-xs text-muted-foreground">Intervalo</Label>
+												<Select
+													value={formData.installmentInterval || undefined}
+													onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
+												>
+													<SelectTrigger className="h-9">
+														<SelectValue placeholder="Selecione o intervalo" />
+													</SelectTrigger>
+													<SelectContent>
+														{intervalOptions.map(option => (
+															<SelectItem key={option.value} value={option.value || ""}>
+																<div className="flex items-center gap-2">
+																	<Timer className="h-4 w-4 text-muted-foreground" />
+																	{option.label}
+																</div>
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</div>
+										</div>
+									)}
+
+									{formData.isInstallment && (
+										<div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+											<div className="flex items-center justify-between">
+												<div>
+													<p className="text-sm font-medium">Parcelamento</p>
+													<p className="text-xs text-muted-foreground">Resumo das parcelas</p>
+												</div>
+											</div>
+											<div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full min-w-0">
+												<div className="flex items-center gap-2">
+													<Label className="text-xs text-muted-foreground">Parcelas</Label>
+													<Select
+														value={formData.installmentNumber}
+														onValueChange={(value) => handleChange("installmentNumber", value)}
+													>
+														<SelectTrigger className="w-[88px] min-w-[88px] h-9 flex-shrink-0">
+															<SelectValue placeholder="2" />
+														</SelectTrigger>
+														<SelectContent>
+															{Array.from({ length: 23 }, (_, index) => index + 2).map(count => (
+																<SelectItem key={count} value={String(count)}>
+																	{count}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+												<div className="flex items-center min-w-0 gap-1 w-full sm:w-auto">
+													<span className="min-w-0 max-w-[200px] truncate text-sm text-muted-foreground">
+														{installmentPreview.canShow ? installmentPreview.summary : "—"}
+													</span>
+												</div>
+												<div className="flex items-center gap-2">
+													<Label className="text-xs text-muted-foreground">Intervalo</Label>
+													<Select
+														value={formData.installmentInterval || undefined}
+														onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
+													>
+														<SelectTrigger className="h-9">
+															<SelectValue placeholder="Mensal" />
+														</SelectTrigger>
+														<SelectContent>
+															{intervalOptions.map(option => (
+																<SelectItem key={option.value} value={option.value || ""}>
+																	<div className="flex items-center gap-2">
+																		<Timer className="h-4 w-4 text-muted-foreground" />
+																		{option.label}
+																	</div>
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+												{installmentPreview.canShow && (
+													<InstallmentDetails
+														open={isInstallmentDetailsOpen}
+														onOpenChange={setIsInstallmentDetailsOpen}
+														items={installmentPreview.items}
+														totalAmount={installmentPreview.totalAmount}
+													/>
+												)}
+											</div>
+										</div>
+									)}
+								</CollapsibleContent>
+							</div>
+						</Collapsible>
 
 					</div>
 
