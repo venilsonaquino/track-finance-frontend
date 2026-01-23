@@ -19,16 +19,17 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Calendar, Layers, PiggyBank, Plus, Timer, TrendingDown, TrendingUp, Info } from "lucide-react";
+import { Calendar, ChevronRight, Layers, PiggyBank, Plus, Timer, TrendingDown, TrendingUp, Info } from "lucide-react";
 import { useWallets } from "../../hooks/use-wallets";
 import { useCategories } from "../../hooks/use-categories";
-import { useTransactions } from "../../hooks/use-transactions";
 import { toast } from "sonner";
-import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { IntervalType } from "@/types/Interval-type ";
 import { DateUtils } from "@/utils/date-utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { formatCurrency, maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
+import { createMovement } from "@/features/movements/services/movementService";
+import { CreateMovementInput, MovementKind } from "@/features/movements/types";
 
 type TransactionType = "income" | "expense";
 
@@ -36,6 +37,88 @@ type CreateTransactionDialogProps = {
 	onCreated?: () => void | Promise<void>;
 	defaultDate?: Date;
 };
+
+type InstallmentItem = {
+	index: number;
+	date: string;
+	amount: number;
+};
+
+const addInterval = (date: Date, interval: IntervalType, step: number) => {
+	const nextDate = new Date(date);
+	switch (interval) {
+		case "DAILY":
+			nextDate.setDate(nextDate.getDate() + step);
+			return nextDate;
+		case "WEEKLY":
+			nextDate.setDate(nextDate.getDate() + step * 7);
+			return nextDate;
+		case "YEARLY":
+			nextDate.setFullYear(nextDate.getFullYear() + step);
+			return nextDate;
+		case "MONTHLY":
+		default:
+			nextDate.setMonth(nextDate.getMonth() + step);
+			return nextDate;
+	}
+};
+
+const buildInstallmentSchedule = (
+	startDate: string,
+	count: number,
+	amount: number,
+	interval: IntervalType
+): InstallmentItem[] => {
+	const baseDate = new Date(`${startDate}T00:00:00`);
+	return Array.from({ length: count }, (_, index) => {
+		const installmentDate = addInterval(baseDate, interval, index);
+		return {
+			index: index + 1,
+			date: installmentDate.toLocaleDateString("pt-BR"),
+			amount,
+		};
+	});
+};
+
+const InstallmentDetails = ({
+	open,
+	onOpenChange,
+	items,
+	totalAmount,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	items: InstallmentItem[];
+	totalAmount: number;
+}) => (
+	<Popover open={open} onOpenChange={onOpenChange}>
+		<PopoverTrigger asChild>
+			<button
+				type="button"
+				title="Ver detalhes do parcelamento"
+				aria-label="Ver detalhes do parcelamento"
+				className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:text-foreground hover:border-border"
+			>
+				<ChevronRight className="h-4 w-4" />
+			</button>
+		</PopoverTrigger>
+		<PopoverContent align="end" className="w-72 p-3">
+			<div className="text-sm font-medium">Parcelamento</div>
+			<div className="mt-2 max-h-48 space-y-1 overflow-auto text-xs text-muted-foreground">
+				{items.map(item => (
+					<div key={item.index} className="flex items-center justify-between">
+						<span>{item.index}ª parcela • {item.date}</span>
+						<span>{formatCurrency(item.amount)}</span>
+					</div>
+				))}
+			</div>
+			<div className="mt-2 flex items-center justify-between border-t pt-2 text-xs">
+				<span className="text-muted-foreground">Total</span>
+				<span className="font-medium">{formatCurrency(totalAmount)}</span>
+			</div>
+		</PopoverContent>
+	</Popover>
+);
 
 const intervalOptions: { label: string; value: IntervalType }[] = [
 	{ label: "Diário", value: "DAILY" },
@@ -53,7 +136,7 @@ const buildInitialState = (date?: Date) => ({
 	transactionType: "expense" as TransactionType,
 	isRecurring: false,
 	isInstallment: false,
-	installmentNumber: "1",
+	installmentNumber: "2",
 	installmentInterval: "MONTHLY" as IntervalType,
 	affectBalance: true,
 });
@@ -61,12 +144,11 @@ const buildInitialState = (date?: Date) => ({
 export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransactionDialogProps) => {
 	const [isOpen, setIsOpen] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [isInstallmentDetailsOpen, setIsInstallmentDetailsOpen] = useState(false);
 	const [formData, setFormData] = useState(() => buildInitialState(defaultDate));
 
 	const { wallets, loading: walletsLoading } = useWallets();
 	const { categories, loading: categoriesLoading } = useCategories();
-	const { createTransaction } = useTransactions();
-
 	useEffect(() => {
 		setFormData(prev => ({
 			...prev,
@@ -75,12 +157,16 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 	}, [defaultDate]);
 
 	const isValid = useMemo(() => {
+		const installmentsCount = Number(formData.installmentNumber);
+		const hasValidInstallments = !formData.isInstallment || installmentsCount >= 2;
+
 		return Boolean(
 			formData.description.trim() &&
 			formData.amount &&
 			formData.depositedDate &&
 			formData.walletId &&
-			formData.categoryId
+			formData.categoryId &&
+			hasValidInstallments
 		);
 	}, [formData]);
 
@@ -104,8 +190,57 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			...prev,
 			isInstallment: checked,
 			isRecurring: checked ? false : prev.isRecurring,
+			installmentNumber: checked
+				? Number(prev.installmentNumber) >= 2
+					? prev.installmentNumber
+					: "2"
+				: prev.installmentNumber,
 		}));
 	};
+
+	const installmentPreview = useMemo(() => {
+		const totalAmount = parseCurrencyInput(formData.amount);
+		const installmentsCount = Number(formData.installmentNumber);
+		const canShow =
+			formData.isInstallment &&
+			!Number.isNaN(totalAmount) &&
+			totalAmount > 0 &&
+			installmentsCount >= 2;
+
+		if (!canShow) {
+			return {
+				label: "—",
+				items: [] as InstallmentItem[],
+				totalAmount: 0,
+				canShow: false,
+			};
+		}
+
+		const perInstallment = Math.round((totalAmount / installmentsCount) * 100) / 100;
+		return {
+			label: formatCurrency(perInstallment),
+			items: buildInstallmentSchedule(
+				formData.depositedDate,
+				installmentsCount,
+				perInstallment,
+				formData.installmentInterval ?? "MONTHLY"
+			),
+			totalAmount,
+			canShow: true,
+		};
+	}, [
+		formData.amount,
+		formData.depositedDate,
+		formData.installmentInterval,
+		formData.installmentNumber,
+		formData.isInstallment,
+	]);
+
+	useEffect(() => {
+		if (!installmentPreview.canShow && isInstallmentDetailsOpen) {
+			setIsInstallmentDetailsOpen(false);
+		}
+	}, [installmentPreview.canShow, isInstallmentDetailsOpen]);
 
 	const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
@@ -116,38 +251,45 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 		}
 
 		const amountValue = parseCurrencyInput(formData.amount);
-		if (Number.isNaN(amountValue)) {
+		if (Number.isNaN(amountValue) || amountValue <= 0) {
 			toast.error("Informe um valor válido.");
 			return;
 		}
 
-		const normalizedAmount = formData.transactionType === "expense" ? -Math.abs(amountValue) : Math.abs(amountValue);
+		const installmentsCount = Number(formData.installmentNumber);
+		if (formData.isInstallment && installmentsCount < 2) {
+			toast.error("Informe pelo menos 2 parcelas.");
+			return;
+		}
 
-		const payload: TransactionRequest = {
+		const absoluteAmount = Math.abs(amountValue);
+		const normalizedAmount =
+			formData.transactionType === "expense" ? -absoluteAmount : absoluteAmount;
+
+		const kind: MovementKind = formData.isInstallment
+			? "installment"
+			: formData.isRecurring
+				? "recurring"
+				: "single";
+
+		const amountForMovement = kind === "single" ? normalizedAmount : absoluteAmount;
+
+		const movementInput: CreateMovementInput = {
+			kind,
 			depositedDate: formData.depositedDate,
-			description: formData.description.trim(),
+			description: formData.description,
 			walletId: formData.walletId,
 			categoryId: formData.categoryId,
-			amount: normalizedAmount,
-			isInstallment: formData.isInstallment || null,
-			installmentNumber: formData.isInstallment ? Number(formData.installmentNumber) || null : null,
-			installmentInterval: formData.isInstallment ? formData.installmentInterval : null,
-			isRecurring: formData.isRecurring || null,
-			fitId: null,
-			bankName: "Manual",
-			bankId: "manual",
-			accountId: formData.walletId,
-			accountType: "MANUAL",
-			currency: "BRL",
-			transactionDate: formData.depositedDate,
-			transactionSource: "MANUAL",
+			amount: amountForMovement,
 			affectBalance: formData.affectBalance,
+			interval: formData.installmentInterval,
+			installmentsCount: formData.isInstallment ? installmentsCount : null,
 		};
 
 		setIsSubmitting(true);
 
 		try {
-			await createTransaction(payload);
+			await createMovement(movementInput);
 			toast.success("Transação criada com sucesso.");
 			setIsOpen(false);
 			setFormData(buildInitialState(defaultDate));
@@ -191,15 +333,47 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 
 						<div className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr] gap-3">
 							<div className="space-y-2">
-								<Label htmlFor="amount">Valor</Label>
-								<Input
-									id="amount"
-									type="text"
-									inputMode="decimal"
-									placeholder="0,00"
-									value={formData.amount}
-									onChange={(e) => handleChange("amount", maskCurrencyInput(e.target.value))}
-								/>
+								<Label htmlFor="amount">{formData.isInstallment ? "Valor total" : "Valor"}</Label>
+								<div className={formData.isInstallment ? "flex flex-col sm:flex-row sm:items-center gap-2" : ""}>
+									<Input
+										id="amount"
+										type="text"
+										inputMode="decimal"
+										placeholder="0,00"
+										value={formData.amount}
+										onChange={(e) => handleChange("amount", maskCurrencyInput(e.target.value))}
+										className={formData.isInstallment ? "sm:flex-1" : ""}
+									/>
+									{formData.isInstallment && (
+										<div className="flex items-center gap-2">
+											<Select
+												value={formData.installmentNumber}
+												onValueChange={(value) => handleChange("installmentNumber", value)}
+											>
+												<SelectTrigger className="w-[96px]">
+													<SelectValue placeholder="2" />
+												</SelectTrigger>
+												<SelectContent>
+													{Array.from({ length: 23 }, (_, index) => index + 2).map(count => (
+														<SelectItem key={count} value={String(count)}>
+															{count}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+											<span className="text-sm text-muted-foreground">vezes</span>
+											<span className="text-sm text-muted-foreground">de {installmentPreview.label}</span>
+											{installmentPreview.canShow && (
+												<InstallmentDetails
+													open={isInstallmentDetailsOpen}
+													onOpenChange={setIsInstallmentDetailsOpen}
+													items={installmentPreview.items}
+													totalAmount={installmentPreview.totalAmount}
+												/>
+											)}
+										</div>
+									)}
+								</div>
 							</div>
 							<div className="space-y-2">
 								<Label>Tipo</Label>
@@ -352,38 +526,26 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 						</div>
 
 						{formData.isInstallment && (
-							<div className="grid grid-cols-1 sm:grid-cols-[1fr_1.2fr] gap-3">
-								<div className="space-y-2">
-									<Label htmlFor="installmentNumber">Número de parcelas</Label>
-									<Input
-										id="installmentNumber"
-										type="number"
-										min={1}
-										value={formData.installmentNumber}
-										onChange={(e) => handleChange("installmentNumber", e.target.value)}
-									/>
-								</div>
-								<div className="space-y-2">
-									<Label>Intervalo</Label>
-									<Select
-										value={formData.installmentInterval || undefined}
-										onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
-									>
-										<SelectTrigger>
-											<SelectValue placeholder="Selecione o intervalo" />
-										</SelectTrigger>
-										<SelectContent>
-											{intervalOptions.map(option => (
-												<SelectItem key={option.value} value={option.value || ""}>
-													<div className="flex items-center gap-2">
-														<Timer className="h-4 w-4 text-muted-foreground" />
-														{option.label}
-													</div>
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</div>
+							<div className="space-y-2">
+								<Label>Intervalo</Label>
+								<Select
+									value={formData.installmentInterval || undefined}
+									onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="Selecione o intervalo" />
+									</SelectTrigger>
+									<SelectContent>
+										{intervalOptions.map(option => (
+											<SelectItem key={option.value} value={option.value || ""}>
+												<div className="flex items-center gap-2">
+													<Timer className="h-4 w-4 text-muted-foreground" />
+													{option.label}
+												</div>
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
 							</div>
 						)}
 					</div>
