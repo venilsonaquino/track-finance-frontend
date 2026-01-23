@@ -30,7 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 import { createMovement } from "@/features/movements/services/movementService";
-import { calculateInstallmentAmount } from "@/features/movements/mappers/amountUtils";
+import { calculateInstallmentAmount, calculateInstallmentSchedule } from "@/features/movements/mappers/amountUtils";
 import { CreateMovementInput, MovementKind } from "@/features/movements/types";
 
 type TransactionType = "income" | "expense";
@@ -69,12 +69,11 @@ const addInterval = (date: Date, interval: IntervalType, step: number) => {
 
 const buildInstallmentSchedule = (
 	startDate: string,
-	count: number,
-	amount: number,
+	amounts: number[],
 	interval: IntervalType
 ): InstallmentItem[] => {
 	const baseDate = new Date(`${startDate}T00:00:00`);
-	return Array.from({ length: count }, (_, index) => {
+	return amounts.map((amount, index) => {
 		const installmentDate = addInterval(baseDate, interval, index);
 		return {
 			index: index + 1,
@@ -255,8 +254,9 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			};
 		}
 
+		const schedule = calculateInstallmentSchedule(totalAmount, installmentsCount);
 		const perInstallment = calculateInstallmentAmount(totalAmount, installmentsCount);
-		if (perInstallment === null) {
+		if (schedule === null || perInstallment === null) {
 			return {
 				summary: "—",
 				items: [] as InstallmentItem[],
@@ -268,8 +268,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			summary: `${installmentsCount}x · ${formatCurrency(perInstallment)}`,
 			items: buildInstallmentSchedule(
 				formData.depositedDate,
-				installmentsCount,
-				perInstallment,
+				schedule.amounts,
 				formData.installmentInterval ?? "MONTHLY"
 			),
 			totalAmount,
