@@ -38,6 +38,11 @@ type TransactionType = "income" | "expense";
 type CreateTransactionDialogProps = {
 	onCreated?: () => void | Promise<void>;
 	defaultDate?: Date;
+	triggerLabel?: string;
+	triggerVariant?: React.ComponentProps<typeof Button>["variant"];
+	triggerSize?: React.ComponentProps<typeof Button>["size"];
+	triggerClassName?: string;
+	showTriggerIcon?: boolean;
 };
 
 type InstallmentItem = {
@@ -145,7 +150,15 @@ const buildInitialState = (date?: Date) => ({
 	affectBalance: true,
 });
 
-export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransactionDialogProps) => {
+export const CreateTransactionDialog = ({
+	onCreated,
+	defaultDate,
+	triggerLabel = "Nova Transação",
+	triggerVariant = "default",
+	triggerSize = "default",
+	triggerClassName,
+	showTriggerIcon = true,
+}: CreateTransactionDialogProps) => {
 	const [isOpen, setIsOpen] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isInstallmentDetailsOpen, setIsInstallmentDetailsOpen] = useState(false);
@@ -358,9 +371,9 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 	return (
 		<Dialog open={isOpen} onOpenChange={setIsOpen}>
 			<DialogTrigger asChild>
-				<Button>
-					<Plus className="h-4 w-4 mr-2" />
-					Nova Transação
+				<Button variant={triggerVariant} size={triggerSize} className={triggerClassName}>
+					{showTriggerIcon && <Plus className="h-4 w-4 mr-2" />}
+					{triggerLabel}
 				</Button>
 			</DialogTrigger>
 			<DialogContent className="sm:max-w-2xl overflow-x-hidden">

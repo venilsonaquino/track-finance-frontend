@@ -2,9 +2,10 @@ import PageBreadcrumbNav from "@/components/BreadcrumbNav";
 import { formatCurrency } from "@/utils/currency-utils";
 import { useTransactions } from "../hooks/use-transactions";
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, Wallet } from "lucide-react";
+import { HelpCircle, MoreVertical, Upload, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
@@ -28,7 +29,7 @@ import { DeleteTransactionDialog } from "./components/DeleteTransactionDialog";
 import { toast } from "sonner";
 
 const TransactionsPage = () => {
-	// const navigate = useNavigate();
+	const navigate = useNavigate();
 	const { getTransactions, deleteTransaction } = useTransactions();
 	const [transactionsData, setTransactionsData] = useState<TransactionsRecordResponse | null>(null);
 	const [currentDate, setCurrentDate] = useState(new Date());
@@ -124,6 +125,17 @@ const TransactionsPage = () => {
 	};
 
 	const allTransactions = transactionsData?.records?.flatMap(record => record.transactions) || [];
+	const hasLoaded = transactionsData !== null;
+	const hasTransactions = allTransactions.length > 0;
+	const hasActiveFilters = Boolean(activeFilters);
+
+	const handleClearFilters = () => {
+		setActiveFilters(null);
+	};
+
+	const handleImportTransactions = () => {
+		navigate("/transacoes/importar");
+	};
 
 	const columns: ColumnDef<TransactionResponse>[] = [
 		{
@@ -261,23 +273,72 @@ const TransactionsPage = () => {
 
 	return (
 		<>
-			<div className="flex justify-between items-center">
+			<div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
 				<PageBreadcrumbNav items={[{ label: "Transações" }, { label: "Movimentações", href: "/transacoes/movimentacoes" }]} />
-				<div className="flex justify-end gap-2 mb-4">
+				<div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-end sm:mb-4">
 					<CreateTransactionDialog onCreated={loadTransactions} defaultDate={currentDate} />
 					<FilterSheet onApplyFilters={handleApplyFilters} />
 				</div>
 			</div>
 
-			<DataTable 
-				columns={columns} 
-				data={allTransactions} 
-				toolbar={
-					<div className="flex items-center gap-2">
+			{hasLoaded && !hasTransactions ? (
+				<div className="min-h-[520px] flex flex-col items-center justify-center px-6 py-10">
+					<div className="flex flex-col items-center text-center max-w-lg">
+						<img
+							src="/images/pigg.png"
+							alt="Ilustração de um cofrinho"
+							className="w-full max-w-[420px] sm:max-w-[520px] md:max-w-[600px] h-auto"
+							loading="lazy"
+						/>
+						<h2 className="mt-6 text-lg font-semibold">
+							Você ainda não tem movimentações cadastradas
+						</h2>
+						<p className="mt-2 text-sm text-muted-foreground">
+							Que tal adicionar sua primeira transação?
+						</p>
+						<div className="mt-6">
+							<CreateTransactionDialog
+								onCreated={loadTransactions}
+								defaultDate={currentDate}
+								triggerLabel="Adicionar Primeira Transação"
+								triggerSize="lg"
+								triggerVariant="default"
+							/>
+						</div>
+						<div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted-foreground">
+							<Button variant="link" size="sm" onClick={handleImportTransactions} className="px-0">
+								<Upload className="h-4 w-4" />
+								Importar extrato bancário
+							</Button>
+							<Button variant="link" size="sm" className="px-0">
+								<HelpCircle className="h-4 w-4" />
+								Ver como funciona
+							</Button>
+						</div>
+						{hasActiveFilters && (
+							<div className="mt-4 text-sm text-muted-foreground">
+								<p>Nenhuma movimentação encontrada para os filtros selecionados.</p>
+								<Button variant="link" size="sm" onClick={handleClearFilters} className="px-0">
+									Limpar filtros
+								</Button>
+							</div>
+						)}
+						<div className="mt-8">
+							<MonthYearPicker date={currentDate} onChange={handleMonthYearChange} />
+						</div>
+					</div>
+				</div>
+			) : (
+				<>
+					<div className="flex items-center gap-2 mb-4">
 						<MonthYearPicker date={currentDate} onChange={handleMonthYearChange} />
 					</div>
-				}
-			/>
+					<DataTable
+						columns={columns}
+						data={allTransactions}
+					/>
+				</>
+			)}
 
 			<EditTransactionDialog
 				open={isEditDialogOpen}
