@@ -29,6 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatCurrency, maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 import { createMovement } from "@/features/movements/services/movementService";
+import { calculateInstallmentAmount } from "@/features/movements/mappers/amountUtils";
 import { CreateMovementInput, MovementKind } from "@/features/movements/types";
 
 type TransactionType = "income" | "expense";
@@ -43,6 +44,11 @@ type InstallmentItem = {
 	date: string;
 	amount: number;
 };
+
+const MAX_AMOUNT = 9_999_999_999.99;
+const MAX_INTEGER_DIGITS = 10;
+const MAX_CENTS_DIGITS = 2;
+const MAX_TOTAL_DIGITS = MAX_INTEGER_DIGITS + MAX_CENTS_DIGITS;
 
 const addInterval = (date: Date, interval: IntervalType, step: number) => {
 	const nextDate = new Date(date);
@@ -93,14 +99,15 @@ const InstallmentDetails = ({
 }) => (
 	<Popover open={open} onOpenChange={onOpenChange}>
 		<PopoverTrigger asChild>
-			<button
+			<Button
 				type="button"
-				title="Ver detalhes do parcelamento"
 				aria-label="Ver detalhes do parcelamento"
-				className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:text-foreground hover:border-border"
+				variant="ghost"
+				size="icon"
+				className="shrink-0 text-muted-foreground hover:text-foreground"
 			>
 				<ChevronRight className="h-4 w-4" />
-			</button>
+			</Button>
 		</PopoverTrigger>
 		<PopoverContent align="end" className="w-72 p-3">
 			<div className="text-sm font-medium">Parcelamento</div>
@@ -146,6 +153,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isInstallmentDetailsOpen, setIsInstallmentDetailsOpen] = useState(false);
 	const [formData, setFormData] = useState(() => buildInitialState(defaultDate));
+	const [amountOverMax, setAmountOverMax] = useState(false);
 
 	const { wallets, loading: walletsLoading } = useWallets();
 	const { categories, loading: categoriesLoading } = useCategories();
@@ -175,6 +183,42 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			...prev,
 			[field]: value,
 		}));
+	};
+
+	const maskCurrencyWithLimit = (nextValue: string) => {
+		const digitsOnly = nextValue.replace(/\D/g, "");
+		const limitedDigits = digitsOnly.slice(0, MAX_TOTAL_DIGITS);
+		return maskCurrencyInput(limitedDigits);
+	};
+
+	const handleAmountChange = (nextValue: string) => {
+		const maskedValue = maskCurrencyWithLimit(nextValue);
+		const parsedValue = parseCurrencyInput(maskedValue);
+		const isOverMax = Number.isFinite(parsedValue) && parsedValue > MAX_AMOUNT;
+
+		if (isOverMax) {
+			setAmountOverMax(true);
+			handleChange("amount", maskCurrencyInput(String(MAX_AMOUNT)));
+			return;
+		}
+
+		setAmountOverMax(false);
+		handleChange("amount", maskedValue);
+	};
+
+	const handleAmountBlur = () => {
+		const maskedValue = maskCurrencyWithLimit(formData.amount);
+		const parsedValue = parseCurrencyInput(maskedValue);
+		const isOverMax = Number.isFinite(parsedValue) && parsedValue > MAX_AMOUNT;
+
+		if (isOverMax) {
+			setAmountOverMax(true);
+			handleChange("amount", maskCurrencyInput(String(MAX_AMOUNT)));
+			return;
+		}
+
+		setAmountOverMax(false);
+		handleChange("amount", maskedValue);
 	};
 
 	const handleToggleRecurring = (checked: boolean) => {
@@ -216,9 +260,17 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			};
 		}
 
-		const perInstallment = Math.round((totalAmount / installmentsCount) * 100) / 100;
+		const perInstallment = calculateInstallmentAmount(totalAmount, installmentsCount);
+		if (perInstallment === null) {
+			return {
+				summary: "—",
+				items: [] as InstallmentItem[],
+				totalAmount: 0,
+				canShow: false,
+			};
+		}
 		return {
-			label: formatCurrency(perInstallment),
+			summary: `${installmentsCount}x · ${formatCurrency(perInstallment)}`,
 			items: buildInstallmentSchedule(
 				formData.depositedDate,
 				installmentsCount,
@@ -253,6 +305,10 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 		const amountValue = parseCurrencyInput(formData.amount);
 		if (Number.isNaN(amountValue) || amountValue <= 0) {
 			toast.error("Informe um valor válido.");
+			return;
+		}
+		if (amountValue > MAX_AMOUNT) {
+			toast.error(`Valor máximo: ${formatCurrency(MAX_AMOUNT)}`);
 			return;
 		}
 
@@ -310,8 +366,8 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 					Nova Transação
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="sm:max-w-2xl">
-				<form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
+			<DialogContent className="sm:max-w-2xl overflow-x-hidden">
+				<form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh] overflow-x-hidden">
 					<DialogHeader className="space-y-2">
 						<DialogTitle>Nova transação</DialogTitle>
 						<DialogDescription>
@@ -319,7 +375,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 						</DialogDescription>
 					</DialogHeader>
 
-					<div className="flex-1 overflow-y-auto py-6 space-y-6 pr-1">
+					<div className="flex-1 overflow-y-auto overflow-x-hidden py-6 space-y-6 pr-1">
 						<div className="space-y-2">
 							<Label htmlFor="description">Descrição</Label>
 							<Input
@@ -331,26 +387,26 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 							/>
 						</div>
 
-						<div className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr] gap-3">
+						<div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
 							<div className="space-y-2">
 								<Label htmlFor="amount">{formData.isInstallment ? "Valor total" : "Valor"}</Label>
-								<div className={formData.isInstallment ? "flex flex-col sm:flex-row sm:items-center gap-2" : ""}>
+								<div className={formData.isInstallment ? "flex flex-col sm:flex-row sm:items-center gap-2 w-full min-w-0" : ""}>
 									<Input
 										id="amount"
 										type="text"
 										inputMode="decimal"
 										placeholder="0,00"
 										value={formData.amount}
-										onChange={(e) => handleChange("amount", maskCurrencyInput(e.target.value))}
-										className={formData.isInstallment ? "sm:flex-1" : ""}
+										onChange={(e) => handleAmountChange(e.target.value)}
+										onBlur={handleAmountBlur}
 									/>
 									{formData.isInstallment && (
-										<div className="flex items-center gap-2">
+										<div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full min-w-0">
 											<Select
 												value={formData.installmentNumber}
 												onValueChange={(value) => handleChange("installmentNumber", value)}
 											>
-												<SelectTrigger className="w-[96px]">
+												<SelectTrigger className="w-[88px] min-w-[88px] flex-shrink-0">
 													<SelectValue placeholder="2" />
 												</SelectTrigger>
 												<SelectContent>
@@ -361,46 +417,28 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 													))}
 												</SelectContent>
 											</Select>
-											<span className="text-sm text-muted-foreground">vezes</span>
-											<span className="text-sm text-muted-foreground">de {installmentPreview.label}</span>
-											{installmentPreview.canShow && (
-												<InstallmentDetails
-													open={isInstallmentDetailsOpen}
-													onOpenChange={setIsInstallmentDetailsOpen}
-													items={installmentPreview.items}
-													totalAmount={installmentPreview.totalAmount}
-												/>
-											)}
+											<div className="flex items-center min-w-0 gap-1 w-full sm:w-auto">
+												<span className="min-w-0 max-w-[180px] truncate text-sm text-muted-foreground">
+													{installmentPreview.canShow ? installmentPreview.summary : "—"}
+												</span>
+												{installmentPreview.canShow && (
+													<InstallmentDetails
+														open={isInstallmentDetailsOpen}
+														onOpenChange={setIsInstallmentDetailsOpen}
+														items={installmentPreview.items}
+														totalAmount={installmentPreview.totalAmount}
+													/>
+												)}
+											</div>
 										</div>
 									)}
 								</div>
+								{amountOverMax && (
+									<p className="text-xs text-destructive">
+										Valor máximo: {formatCurrency(MAX_AMOUNT)}
+									</p>
+								)}
 							</div>
-							<div className="space-y-2">
-								<Label>Tipo</Label>
-								<div className="grid grid-cols-2 gap-2">
-									<Button
-										type="button"
-										variant={formData.transactionType === "income" ? "default" : "outline"}
-										onClick={() => handleChange("transactionType", "income")}
-										className="w-full"
-									>
-										<TrendingUp className="h-4 w-4 mr-2" />
-										Entrada
-									</Button>
-									<Button
-										type="button"
-										variant={formData.transactionType === "expense" ? "default" : "outline"}
-										onClick={() => handleChange("transactionType", "expense")}
-										className="w-full"
-									>
-										<TrendingDown className="h-4 w-4 mr-2" />
-										Saída
-									</Button>
-								</div>
-							</div>
-						</div>
-
-						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 							<div className="space-y-2">
 								<Label htmlFor="date">Data</Label>
 								<div className="relative">
@@ -414,6 +452,9 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 									/>
 								</div>
 							</div>
+						</div>
+
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 							<div className="space-y-2">
 								<Label>Carteira</Label>
 								<Select
@@ -439,60 +480,61 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 									</SelectContent>
 								</Select>
 							</div>
-						</div>
-
-						<div className="space-y-1">
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<Label className="cursor-default">Afetar saldo da carteira?</Label>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<button
-												type="button"
-												className="h-7 w-7 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground"
-											>
-												<Info className="h-4 w-4" />
-											</button>
-										</TooltipTrigger>
-										<TooltipContent side="top">
-											Se desativado, essa transação será registrada apenas para controle e não alterará seu saldo.
-										</TooltipContent>
-									</Tooltip>
-								</div>
-								<Switch
-									checked={formData.affectBalance}
-									onCheckedChange={(checked) => handleChange("affectBalance", checked)}
-								/>
+							<div className="space-y-2">
+								<Label>Categoria</Label>
+								<Select
+									value={formData.categoryId || undefined}
+									onValueChange={(value) => handleChange("categoryId", value)}
+									disabled={categoriesLoading}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="Selecione uma categoria" />
+									</SelectTrigger>
+									<SelectContent>
+										{categoriesLoading ? (
+											<SelectItem value="loading" disabled>Carregando...</SelectItem>
+										) : categories.length === 0 ? (
+											<SelectItem value="empty" disabled>Nenhuma categoria encontrada</SelectItem>
+										) : (
+											categories.map(category => (
+												<SelectItem key={category.id} value={category.id}>
+													<div className="flex items-center gap-2">
+														<span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: category.color }} />
+														{category.name}
+													</div>
+												</SelectItem>
+											))
+										)}
+									</SelectContent>
+								</Select>
 							</div>
 						</div>
 
-						<div className="space-y-2">
-							<Label>Categoria</Label>
-							<Select
-								value={formData.categoryId || undefined}
-								onValueChange={(value) => handleChange("categoryId", value)}
-								disabled={categoriesLoading}
-							>
-								<SelectTrigger>
-									<SelectValue placeholder="Selecione uma categoria" />
-								</SelectTrigger>
-								<SelectContent>
-									{categoriesLoading ? (
-										<SelectItem value="loading" disabled>Carregando...</SelectItem>
-									) : categories.length === 0 ? (
-										<SelectItem value="empty" disabled>Nenhuma categoria encontrada</SelectItem>
-									) : (
-										categories.map(category => (
-											<SelectItem key={category.id} value={category.id}>
-												<div className="flex items-center gap-2">
-													<span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: category.color }} />
-													{category.name}
-												</div>
-											</SelectItem>
-										))
-									)}
-								</SelectContent>
-							</Select>
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+							<div className="space-y-2 shrink-0">
+								<Label>Tipo</Label>
+								<div className="grid grid-cols-2 gap-2">
+									<Button
+										type="button"
+										variant={formData.transactionType === "income" ? "default" : "outline"}
+										onClick={() => handleChange("transactionType", "income")}
+										className="w-full"
+									>
+										<TrendingUp className="h-4 w-4 mr-2" />
+										Entrada
+									</Button>
+									<Button
+										type="button"
+										variant={formData.transactionType === "expense" ? "default" : "outline"}
+										onClick={() => handleChange("transactionType", "expense")}
+										className="w-full"
+									>
+										<TrendingDown className="h-4 w-4 mr-2" />
+										Saída
+									</Button>
+								</div>
+							</div>
+
 						</div>
 
 						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -548,7 +590,33 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 								</Select>
 							</div>
 						)}
+
+						<div className="space-y-1">
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2">
+									<Label className="cursor-default">Afetar saldo da carteira?</Label>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												className="h-7 w-7 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground"
+											>
+												<Info className="h-4 w-4" />
+											</button>
+										</TooltipTrigger>
+										<TooltipContent side="top">
+											Se desativado, essa transação será registrada apenas para controle e não alterará seu saldo.
+										</TooltipContent>
+									</Tooltip>
+								</div>
+								<Switch
+									checked={formData.affectBalance}
+									onCheckedChange={(checked) => handleChange("affectBalance", checked)}
+								/>
+							</div>
+						</div>
 					</div>
+
 
 					<DialogFooter className="gap-3 border-t pt-4">
 						<Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>

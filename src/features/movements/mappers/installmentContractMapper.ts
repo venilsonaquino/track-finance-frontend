@@ -1,6 +1,6 @@
 import { InstallmentContractRequest } from "@/api/dtos/contracts/installmentContractRequest";
 import { MovementInput } from "../types";
-import { formatAmountString } from "./amountUtils";
+import { calculateInstallmentAmount, formatAmountString } from "./amountUtils";
 
 export const mapToInstallmentContractPayload = (
   input: MovementInput
@@ -10,10 +10,13 @@ export const mapToInstallmentContractPayload = (
   description: input.description.trim(),
   totalAmount: formatAmountString(input.amount),
   installmentsCount: input.installmentsCount ?? 2,
-  installmentAmount:
-    input.installmentsCount && input.installmentsCount > 0
-      ? formatAmountString(input.amount / input.installmentsCount)
-      : undefined,
+  installmentAmount: (() => {
+    const calculated = calculateInstallmentAmount(
+      input.amount,
+      input.installmentsCount ?? 0
+    );
+    return calculated !== null ? formatAmountString(calculated) : undefined;
+  })(),
   interval: input.interval,
   firstDueDate: input.depositedDate,
 });
