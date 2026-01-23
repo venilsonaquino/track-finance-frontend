@@ -217,6 +217,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			...prev,
 			isRecurring: checked,
 			isInstallment: checked ? false : prev.isInstallment,
+			installmentInterval: checked ? prev.installmentInterval ?? "MONTHLY" : prev.installmentInterval,
 		}));
 	};
 
@@ -230,6 +231,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 					? prev.installmentNumber
 					: "2"
 				: prev.installmentNumber,
+			installmentInterval: checked ? "MONTHLY" : prev.installmentInterval,
 		}));
 	};
 
@@ -531,51 +533,89 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 							</div>
 						</div>
 
-						{formData.isInstallment && (
-							<div className="space-y-2">
-								<Label>Intervalo</Label>
-								<Select
-									value={formData.installmentInterval || undefined}
-									onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
-								>
-									<SelectTrigger>
-										<SelectValue placeholder="Selecione o intervalo" />
-									</SelectTrigger>
-									<SelectContent>
-										{intervalOptions.map(option => (
-											<SelectItem key={option.value} value={option.value || ""}>
-												<div className="flex items-center gap-2">
-													<Timer className="h-4 w-4 text-muted-foreground" />
-													{option.label}
-												</div>
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
+						{formData.isRecurring && (
+							<div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+								<div>
+									<p className="text-sm font-medium">Transacao fixa</p>
+									<p className="text-xs text-muted-foreground">Defina com que frequencia a transacao se repete</p>
+								</div>
+								<div className="flex items-center gap-2">
+									<Label className="text-xs text-muted-foreground">Intervalo</Label>
+									<Select
+										value={formData.installmentInterval || undefined}
+										onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
+									>
+										<SelectTrigger className="h-9">
+											<SelectValue placeholder="Selecione o intervalo" />
+										</SelectTrigger>
+										<SelectContent>
+											{intervalOptions.map(option => (
+												<SelectItem key={option.value} value={option.value || ""}>
+													<div className="flex items-center gap-2">
+														<Timer className="h-4 w-4 text-muted-foreground" />
+														{option.label}
+													</div>
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
 							</div>
 						)}
 
 						{formData.isInstallment && (
-							<div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full min-w-0">
-								<Select
-									value={formData.installmentNumber}
-									onValueChange={(value) => handleChange("installmentNumber", value)}
-								>
-									<SelectTrigger className="w-[88px] min-w-[88px] flex-shrink-0">
-										<SelectValue placeholder="2" />
-									</SelectTrigger>
-									<SelectContent>
-										{Array.from({ length: 23 }, (_, index) => index + 2).map(count => (
-											<SelectItem key={count} value={String(count)}>
-												{count}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-								<div className="flex items-center min-w-0 gap-1 w-full sm:w-auto">
-									<span className="min-w-0 max-w-[180px] truncate text-sm text-muted-foreground">
-										{installmentPreview.canShow ? installmentPreview.summary : "—"}
-									</span>
+							<div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+								<div className="flex items-center justify-between">
+									<div>
+										<p className="text-sm font-medium">Parcelamento</p>
+										<p className="text-xs text-muted-foreground">Resumo das parcelas</p>
+									</div>
+								</div>
+								<div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full min-w-0">
+									<div className="flex items-center gap-2">
+										<Label className="text-xs text-muted-foreground">Parcelas</Label>
+										<Select
+											value={formData.installmentNumber}
+											onValueChange={(value) => handleChange("installmentNumber", value)}
+										>
+											<SelectTrigger className="w-[88px] min-w-[88px] h-9 flex-shrink-0">
+												<SelectValue placeholder="2" />
+											</SelectTrigger>
+											<SelectContent>
+												{Array.from({ length: 23 }, (_, index) => index + 2).map(count => (
+													<SelectItem key={count} value={String(count)}>
+														{count}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+									<div className="flex items-center min-w-0 gap-1 w-full sm:w-auto">
+										<span className="min-w-0 max-w-[200px] truncate text-sm text-muted-foreground">
+											{installmentPreview.canShow ? installmentPreview.summary : "—"}
+										</span>
+									</div>
+									<div className="flex items-center gap-2">
+										<Label className="text-xs text-muted-foreground">Intervalo</Label>
+										<Select
+											value={formData.installmentInterval || undefined}
+											onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
+										>
+											<SelectTrigger className="h-9">
+												<SelectValue placeholder="Mensal" />
+											</SelectTrigger>
+											<SelectContent>
+												{intervalOptions.map(option => (
+													<SelectItem key={option.value} value={option.value || ""}>
+														<div className="flex items-center gap-2">
+															<Timer className="h-4 w-4 text-muted-foreground" />
+															{option.label}
+														</div>
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
 									{installmentPreview.canShow && (
 										<InstallmentDetails
 											open={isInstallmentDetailsOpen}
