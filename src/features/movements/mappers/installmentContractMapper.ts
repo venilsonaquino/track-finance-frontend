@@ -17,6 +17,6 @@ export const mapToInstallmentContractPayload = (
     if (!breakdown || calculated === null) return undefined;
     return breakdown.remainder === 0 ? formatAmountString(calculated) : undefined;
   })(),
-  interval: input.interval,
+  installmentInterval: input.installmentInterval,
   firstDueDate: input.depositedDate,
 });

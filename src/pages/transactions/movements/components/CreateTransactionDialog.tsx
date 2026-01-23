@@ -48,9 +48,9 @@ type InstallmentItem = {
 
 const MAX_AMOUNT = 9_999_999_999.99;
 
-const addInterval = (date: Date, interval: IntervalType, step: number) => {
+const addInterval = (date: Date, installmentInterval: IntervalType, step: number) => {
 	const nextDate = new Date(date);
-	switch (interval) {
+	switch (installmentInterval) {
 		case "DAILY":
 			nextDate.setDate(nextDate.getDate() + step);
 			return nextDate;
@@ -70,11 +70,11 @@ const addInterval = (date: Date, interval: IntervalType, step: number) => {
 const buildInstallmentSchedule = (
 	startDate: string,
 	amounts: number[],
-	interval: IntervalType
+	installmentInterval: IntervalType
 ): InstallmentItem[] => {
 	const baseDate = new Date(`${startDate}T00:00:00`);
 	return amounts.map((amount, index) => {
-		const installmentDate = addInterval(baseDate, interval, index);
+		const installmentDate = addInterval(baseDate, installmentInterval, index);
 		return {
 			index: index + 1,
 			date: installmentDate.toLocaleDateString("pt-BR"),
@@ -332,7 +332,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			categoryId: formData.categoryId,
 			amount: amountForMovement,
 			affectBalance: formData.affectBalance,
-			interval: formData.installmentInterval,
+			installmentInterval: formData.installmentInterval,
 			installmentsCount: formData.isInstallment ? installmentsCount : null,
 		};
 

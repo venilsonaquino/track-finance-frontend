@@ -7,6 +7,6 @@ export interface InstallmentContractRequest {
   totalAmount: string;
   installmentsCount: number;
   installmentAmount?: string;
-  interval: IntervalType;
+  installmentInterval : IntervalType;
   firstDueDate: string;
 }

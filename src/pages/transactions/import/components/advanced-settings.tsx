@@ -24,7 +24,7 @@ interface AdvancedSettingsProps {
   onInstallmentTotalChange: (fitId: string, total: string) => void;
   onRecurringIntervalChange: (
     fitId: string,
-    interval: "DAILY" | "MONTHLY" | "WEEKLY" | "YEARLY" | null
+    installmentInterval: "DAILY" | "MONTHLY" | "WEEKLY" | "YEARLY" | null
   ) => void;
 }
 

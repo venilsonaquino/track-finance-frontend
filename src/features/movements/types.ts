@@ -9,7 +9,7 @@ export type MovementInput = {
   walletId: string;
   categoryId: string;
   affectBalance: boolean;
-  interval: IntervalType;
+  installmentInterval: IntervalType;
   installmentsCount?: number | null;
 };
 

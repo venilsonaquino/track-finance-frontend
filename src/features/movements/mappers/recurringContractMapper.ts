@@ -9,6 +9,6 @@ export const mapToRecurringContractPayload = (
   categoryId: input.categoryId,
   description: input.description.trim(),
   amount: formatAmountString(input.amount),
-  interval: input.interval,
+  installmentInterval: input.installmentInterval,
   firstDueDate: input.depositedDate,
 });
