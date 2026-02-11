@@ -63,10 +63,10 @@ export const useTransactions = () => {
     }
   }, []);
 
-  const getTransactions = useCallback(async (startDate: string, endDate: string, categoryIds?: string[] | null) => {
+  const getTransactions = useCallback(async (startDate: string, endDate: string, view: "realized" | "future" | "all") => {
     try {
       setLoading(true);
-      const response = await TransactionService.getTransactions(startDate, endDate, categoryIds);
+      const response = await TransactionService.getTransactions(startDate, endDate, view);
       setTransactions(response.data);
       return response.data;
     } catch (error) {

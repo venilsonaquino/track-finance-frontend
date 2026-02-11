@@ -47,24 +47,81 @@ const TransactionsPage = () => {
 		walletId: string | null;
 	} | null>(null);
 
+	const normalizeTransactionsResponse = (data: unknown): TransactionsRecordResponse => {
+		const emptySummary = {
+			current_balance: 0,
+			monthly_income: 0,
+			monthly_expense: 0,
+			monthly_balance: 0,
+		};
+
+		if (Array.isArray(data)) {
+			return {
+				records: [
+					{
+						date: "",
+						endOfDayBalance: null,
+						transactions: data as TransactionResponse[],
+					},
+				],
+				summary: emptySummary,
+			};
+		}
+
+		if (data && typeof data === "object") {
+			const asAny = data as Partial<TransactionsRecordResponse> & {
+				transactions?: TransactionResponse[];
+				items?: TransactionResponse[];
+				data?: TransactionResponse[];
+			};
+
+			if (Array.isArray(asAny.records)) {
+				return {
+					records: asAny.records,
+					summary: asAny.summary ?? emptySummary,
+				};
+			}
+
+			const list = asAny.transactions ?? asAny.items ?? asAny.data;
+			if (Array.isArray(list)) {
+				return {
+					records: [
+						{
+							date: "",
+							endOfDayBalance: null,
+							transactions: list,
+						},
+					],
+					summary: emptySummary,
+				};
+			}
+		}
+
+		return { records: [], summary: emptySummary };
+	};
+
 	const loadTransactions = useCallback(async () => {
 		try {
 			let startDate: string;
 			let endDate: string;
-			let categoryIds: string[] = [];
+			let view: "realized" | "future" | "all" = "all";
 
 			if (activeFilters) {
 				startDate = activeFilters.startDate;
 				endDate = activeFilters.endDate;
-				categoryIds = activeFilters.categoryIds;
+				if (activeFilters.timeline === "realizadas") {
+					view = "realized";
+				} else if (activeFilters.timeline === "futuras") {
+					view = "future";
+				}
 			} else {
 				const monthDates = DateUtils.getMonthStartAndEnd(currentDate);
 				startDate = monthDates.startDate;
 				endDate = monthDates.endDate;
 			}
 
-			const response = await getTransactions(startDate, endDate, categoryIds);
-			setTransactionsData(response);
+			const response = await getTransactions(startDate, endDate, view);
+			setTransactionsData(normalizeTransactionsResponse(response));
 		} catch (error) {
 			console.error("Erro ao carregar transações:", error);
 		}
@@ -136,19 +193,11 @@ const TransactionsPage = () => {
 		if (activeFilters?.walletId) {
 			filtered = filtered.filter(transaction => transaction.wallet?.id === activeFilters.walletId);
 		}
-		if (activeFilters?.timeline && activeFilters.timeline !== "todas") {
-			const today = DateUtils.formatToISODate(new Date());
-			if (activeFilters.timeline === "realizadas") {
-				filtered = filtered.filter(transaction => {
-					const depositedDate = DateUtils.formatToISODate(new Date(transaction.depositedDate));
-					return depositedDate <= today;
-				});
-			} else {
-				filtered = filtered.filter(transaction => {
-					const depositedDate = DateUtils.formatToISODate(new Date(transaction.depositedDate));
-					return depositedDate > today;
-				});
-			}
+		if (activeFilters?.categoryIds?.length) {
+			filtered = filtered.filter(transaction => {
+				const categoryId = transaction.category?.id;
+				return categoryId ? activeFilters.categoryIds.includes(categoryId) : false;
+			});
 		}
 		return filtered;
 	}, [activeFilters, allTransactions]);
@@ -341,7 +390,8 @@ const TransactionsPage = () => {
 				</div>
 			</div>
 
-			{hasLoaded && !hasTransactions ? (
+			{/* {
+				hasLoaded && !hasTransactions ? (
 				<div className="min-h-[520px] flex flex-col items-center justify-center px-6 py-10">
 					<div className="flex flex-col items-center text-center max-w-lg">
 						<img
@@ -388,7 +438,7 @@ const TransactionsPage = () => {
 						</div>
 					</div>
 				</div>
-			) : (
+			) : ( */}
 				<>
 					<div className="mb-5 rounded-2xl py-5">
 						<div className="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -441,7 +491,8 @@ const TransactionsPage = () => {
 						data={filteredTransactions}
 					/>
 				</>
-			)}
+		 	{/* )
+		 } */}
 
 			<EditTransactionDialog
 				open={isEditDialogOpen}
