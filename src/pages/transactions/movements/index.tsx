@@ -28,10 +28,12 @@ import { DeleteTransactionDialog } from "./components/DeleteTransactionDialog";
 import { toast } from "sonner";
 import { formatCurrency } from "@/utils/currency-utils";
 import { useCategories } from "../hooks/use-categories";
+import { useWallets } from "../hooks/use-wallets";
 
 const TransactionsPage = () => {
 	const { getTransactions, deleteTransaction } = useTransactions();
 	const { categories } = useCategories();
+	const { wallets } = useWallets();
 	type TransactionsRangeResponse = TransactionsRecordResponse & {
 		period?: { year?: number; month?: number; start?: string; end?: string };
 	};
@@ -283,6 +285,10 @@ const TransactionsPage = () => {
 		return new Map((categories ?? []).map(category => [category.id, category]));
 	}, [categories]);
 
+	const walletById = useMemo(() => {
+		return new Map((wallets ?? []).map(wallet => [wallet.id, wallet]));
+	}, [wallets]);
+
 	const previousTransactions = previousTransactionsData?.records?.flatMap(record => record.transactions) || [];
 	const filteredPreviousTransactions = useMemo(() => {
 		let filtered = previousTransactions;
@@ -524,17 +530,18 @@ const TransactionsPage = () => {
 			cell: ({ row }) => {
 				const wallet = row.getValue("wallet") as any;
 				if (!wallet) return <div className="text-center">-</div>;
+				const resolvedWallet = wallet?.id ? walletById.get(wallet.id) ?? wallet : wallet;
 				
 				return (
 					<div className="text-center">
 						<div className="flex items-center justify-center">
 							<BankLogo 
-								bankId={wallet.bankId} 
+								bankId={resolvedWallet.bankId} 
 								size="md" 
 								fallbackIcon={<Wallet className="w-7 h-4" />}
 								className="mr-2 flex-shrink-0"
 							/>
-							<span className="truncate">{wallet.name}</span>
+							<span className="truncate">{resolvedWallet.name}</span>
 						</div>
 					</div>
 				);
