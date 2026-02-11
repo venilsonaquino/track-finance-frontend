@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
-import { HelpCircle, MoreVertical, Upload, Wallet } from "lucide-react";
+import { Calendar, HelpCircle, MoreVertical, TrendingDown, TrendingUp, Upload, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
@@ -152,6 +152,35 @@ const TransactionsPage = () => {
 		}
 		return filtered;
 	}, [activeFilters, allTransactions]);
+	const summaryTotals = useMemo(() => {
+		let income = 0;
+		let expense = 0;
+		filteredTransactions.forEach(transaction => {
+			const amount = Number(transaction.amount);
+			if (!Number.isFinite(amount)) return;
+			if (transaction.transactionType === "INCOME") {
+				income += amount;
+				return;
+			}
+			if (transaction.transactionType === "EXPENSE") {
+				expense += Math.abs(amount);
+				return;
+			}
+			if (amount >= 0) {
+				income += amount;
+				return;
+			}
+			expense += Math.abs(amount);
+		});
+		return {
+			income,
+			expense,
+			balance: income - expense,
+		};
+	}, [filteredTransactions]);
+	const incomeDisplay = getAmountDisplay(summaryTotals.income, "INCOME");
+	const expenseDisplay = getAmountDisplay(summaryTotals.expense, "EXPENSE");
+	const balanceDisplay = getAmountDisplay(summaryTotals.balance);
 	const hasLoaded = transactionsData !== null;
 	const hasTransactions = filteredTransactions.length > 0;
 	const hasActiveFilters = Boolean(activeFilters);
@@ -307,8 +336,12 @@ const TransactionsPage = () => {
 			<div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
 				<PageBreadcrumbNav items={[{ label: "Transações" }, { label: "Movimentações", href: "/transacoes/movimentacoes" }]} />
 				<div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-end sm:mb-4">
+					<Button variant="outline">
+						<Calendar className="h-4 w-4 mr-2" />
+						Fevereiro 2026
+					</Button>
 					<CreateTransactionDialog onCreated={loadTransactions} defaultDate={currentDate} />
-					<FilterSheet onApplyFilters={handleApplyFilters} activeFilters={activeFilters} />
+					{/* <FilterSheet onApplyFilters={handleApplyFilters} activeFilters={activeFilters} /> */}
 				</div>
 			</div>
 
@@ -361,8 +394,57 @@ const TransactionsPage = () => {
 				</div>
 			) : (
 				<>
-					<div className="flex items-center gap-2 mb-4">
+					{/* <div className="flex items-center gap-2 mb-4">
 						<MonthYearPicker date={currentDate} onChange={handleMonthYearChange} />
+					</div> */}
+					<div className="mb-5 rounded-2xl px-6 py-5">
+						<div className="flex items-center justify-between">
+							<div>
+								<div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Período</div>
+								<div className="text-base font-semibold text-foreground">Fevereiro 2026</div>
+							</div>
+						</div>
+						<div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+							<div className="rounded-xl border bg-background/70 p-6 shadow-sm">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-3 text-base font-semibold text-foreground">
+										<span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+											<TrendingUp className="h-7 w-7" />
+										</span>
+										Receitas
+									</div>
+									<span className={`text-base font-semibold ${incomeDisplay.className}`}>
+										{incomeDisplay.text}
+									</span>
+								</div>
+							</div>
+							<div className="rounded-xl border bg-background/70 p-6 shadow-sm">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-3 text-base font-semibold text-foreground">
+										<span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-600">
+											<TrendingDown className="h-7 w-7" />
+										</span>
+										Despesas
+									</div>
+									<span className={`text-base font-semibold ${expenseDisplay.className}`}>
+										{expenseDisplay.text}
+									</span>
+								</div>
+							</div>
+							<div className="rounded-xl border bg-background/70 p-6 shadow-sm">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-3 text-base font-semibold text-foreground">
+										<span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-blue-500/10 text-blue-600">
+											<Wallet className="h-7 w-7" />
+										</span>
+										Saldo
+									</div>
+									<span className={`text-base font-semibold ${balanceDisplay.className}`}>
+										{balanceDisplay.text}
+									</span>
+								</div>
+							</div>
+						</div>
 					</div>
 					<DataTable
 						columns={columns}
