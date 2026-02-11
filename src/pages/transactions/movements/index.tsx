@@ -4,7 +4,8 @@ import { useTransactions } from "../hooks/use-transactions";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Clock, MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
@@ -304,10 +305,17 @@ const TransactionsPage = () => {
 		return filtered;
 	}, [activeFilters, previousTransactions]);
 
+	type MovementItem = TransactionResponse & { transactionId?: string | null };
+
+	const isScheduledOccurrence = (transaction: TransactionResponse) => {
+		return "transactionId" in transaction && (transaction as MovementItem).transactionId == null;
+	};
+
 	const buildTotals = (transactions: TransactionResponse[]) => {
 		let income = 0;
 		let expense = 0;
 		transactions.forEach(transaction => {
+			if (isScheduledOccurrence(transaction)) return;
 			const amount = Number(transaction.amount);
 			if (!Number.isFinite(amount)) return;
 			if (transaction.transactionType === "INCOME") {
@@ -471,6 +479,9 @@ const TransactionsPage = () => {
 			size: 300,
 			cell: ({ row }) => {
 				const description = row.getValue("description") as string;
+				const transaction = row.original as MovementItem;
+				const isScheduled = isScheduledOccurrence(transaction);
+				const hidePaidBadge = activeFilters?.timeline === "realizadas";
 				
 				return (
 					<div className="text-center">
@@ -479,6 +490,20 @@ const TransactionsPage = () => {
 							className="block truncate"
 						>
 							{description}
+						</span>
+						<span className="ml-2 inline-flex items-center gap-2 align-middle">
+							{isScheduled ? (
+								<>
+									<Clock className="h-3 w-3 text-muted-foreground" />
+									<Badge variant="secondary" className="text-[10px] text-muted-foreground" title="Ainda não debitada">
+										Agendada
+									</Badge>
+								</>
+							) : !hidePaidBadge ? (
+								<Badge className="text-[10px] bg-blue-500/15 text-blue-600 hover:bg-blue-500/15">
+									Paga
+								</Badge>
+							) : null}
 						</span>
 					</div>
 				);
@@ -553,7 +578,8 @@ const TransactionsPage = () => {
 			size: 120,
 			cell: ({ row }) => {
 				const amount = Number(row.getValue("amount"));
-				const transaction = row.original as { transactionType?: "INCOME" | "EXPENSE" | "TRANSFER" };
+				const transaction = row.original as MovementItem;
+				const isScheduled = isScheduledOccurrence(transaction);
 				const { text: amountText, className: amountClass } = getAmountDisplay(
 					amount,
 					transaction.transactionType
@@ -561,7 +587,10 @@ const TransactionsPage = () => {
 				
 				return (
 					<div className="text-right">
-						<span className={amountClass}>
+						<span
+							className={`${amountClass} ${isScheduled ? "opacity-80" : ""}`}
+							title={isScheduled ? "Ainda não debitada" : undefined}
+						>
 							{amountText}
 						</span>
 					</div>
