@@ -5,7 +5,7 @@ export interface TransactionRequest {
   walletId: string;
   categoryId: string;
   amount: number;
-  transactionType: "INCOME" | "EXPENSE" | "TRANSFER";
+  transactionType: "INCOME" | "EXPENSE";
   transactionStatus?: "POSTED" | "REVERSED";
   affectBalance?: boolean;
   ofx?: unknown;
