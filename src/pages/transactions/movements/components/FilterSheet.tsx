@@ -209,7 +209,7 @@ export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters, active
 					</SheetHeader>
 
 					{/* Content */}
-					<div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+					<div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
 						{/* Timeline Section */}
 						<div className="space-y-3">
 							<div className="flex items-center space-x-2">
@@ -343,7 +343,7 @@ export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters, active
 									</div>
 								</div>
 							) : (
-								<div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+								<div className="space-y-2 max-h-100 overflow-y-auto pr-2">
 									{categories.map((category) => {
 										const isSelected = selectedCategories.includes(category.id);
 										return (
