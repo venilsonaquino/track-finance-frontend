@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { useTransactions } from "@/pages/transactions/hooks/use-transactions";
 import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { toast } from "sonner";
-import { IntervalType } from "@/types/Interval-type ";
 
 interface TransactionCardProps {
   transaction: TransactionResponse;
@@ -51,24 +50,19 @@ const TransactionCard = React.memo(({
 
   const handleSave = async (transaction: TransactionResponse) => {
     try {
+      const transferType = (transaction.transferType || "").toUpperCase();
+      const amountValue = Number(transaction.amount);
       const transactionRequest: TransactionRequest = {
         depositedDate: transaction.depositedDate,
         description: transaction.description,
         walletId: transaction.wallet?.id!,
         categoryId: transaction.category?.id!,
-        amount: Number(transaction.amount),
-        isInstallment: transaction.isInstallment,
-        installmentNumber: transaction.installmentNumber,
-        installmentInterval: transaction.installmentInterval as IntervalType,
-        isRecurring: transaction.isRecurring,
-        fitId: transaction.fitId,
-        bankName: transaction.bankName,
-        bankId: transaction.bankId,
-        accountId: transaction.accountId,
-        accountType: transaction.accountType,
-        currency: transaction.currency,
-        transactionDate: transaction.transactionDate,
-        transactionSource: transaction.transactionSource,
+        amount: amountValue,
+        transactionType: transferType === "TRANSFER"
+          ? "TRANSFER"
+          : amountValue < 0
+            ? "EXPENSE"
+            : "INCOME",
       };
 
       await createTransaction(transactionRequest);
