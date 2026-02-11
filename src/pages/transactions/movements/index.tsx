@@ -26,10 +26,12 @@ import { CreateTransactionDialog } from "./components/CreateTransactionDialog";
 import { EditTransactionDialog } from "./components/EditTransactionDialog";
 import { DeleteTransactionDialog } from "./components/DeleteTransactionDialog";
 import { toast } from "sonner";
+import { formatCurrency } from "@/utils/currency-utils";
 
 const TransactionsPage = () => {
 	const { getTransactions, deleteTransaction } = useTransactions();
 	const [transactionsData, setTransactionsData] = useState<TransactionsRecordResponse | null>(null);
+	const [previousTransactionsData, setPreviousTransactionsData] = useState<TransactionsRecordResponse | null>(null);
 	const [currentDate, setCurrentDate] = useState(new Date());
 	const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 	const [editingTransaction, setEditingTransaction] = useState<TransactionResponse | null>(null);
@@ -98,15 +100,53 @@ const TransactionsPage = () => {
 		return { records: [], summary: emptySummary };
 	};
 
+	const getMonthLabel = (date: Date) => {
+		const months = [
+			"janeiro",
+			"fevereiro",
+			"março",
+			"abril",
+			"maio",
+			"junho",
+			"julho",
+			"agosto",
+			"setembro",
+			"outubro",
+			"novembro",
+			"dezembro",
+		];
+		return months[date.getMonth()];
+	};
+
+	const getPeriodLabel = (date: Date) => {
+		const months = [
+			"Janeiro",
+			"Fevereiro",
+			"Março",
+			"Abril",
+			"Maio",
+			"Junho",
+			"Julho",
+			"Agosto",
+			"Setembro",
+			"Outubro",
+			"Novembro",
+			"Dezembro",
+		];
+		return `${months[date.getMonth()]} ${date.getFullYear()}`;
+	};
+
 	const loadTransactions = useCallback(async () => {
 		try {
 			let startDate: string;
 			let endDate: string;
 			let view: "realized" | "future" | "all" = "all";
+			let referenceDate: Date;
 
 			if (activeFilters) {
 				startDate = activeFilters.startDate;
 				endDate = activeFilters.endDate;
+				referenceDate = new Date(`${activeFilters.startDate}T00:00:00`);
 				if (activeFilters.timeline === "realizadas") {
 					view = "realized";
 				} else if (activeFilters.timeline === "futuras") {
@@ -116,10 +156,19 @@ const TransactionsPage = () => {
 				const monthDates = DateUtils.getMonthStartAndEnd(currentDate);
 				startDate = monthDates.startDate;
 				endDate = monthDates.endDate;
+				referenceDate = currentDate;
 			}
 
-			const response = await getTransactions(startDate, endDate, view);
-			setTransactionsData(normalizeTransactionsResponse(response));
+			const previousMonthDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1);
+			const previousRange = DateUtils.getMonthStartAndEnd(previousMonthDate);
+
+			const [currentResponse, previousResponse] = await Promise.all([
+				getTransactions(startDate, endDate, view),
+				getTransactions(previousRange.startDate, previousRange.endDate, view),
+			]);
+
+			setTransactionsData(normalizeTransactionsResponse(currentResponse));
+			setPreviousTransactionsData(normalizeTransactionsResponse(previousResponse));
 		} catch (error) {
 			console.error("Erro ao carregar transações:", error);
 		}
@@ -199,10 +248,26 @@ const TransactionsPage = () => {
 		}
 		return filtered;
 	}, [activeFilters, allTransactions]);
-	const summaryTotals = useMemo(() => {
+
+	const previousTransactions = previousTransactionsData?.records?.flatMap(record => record.transactions) || [];
+	const filteredPreviousTransactions = useMemo(() => {
+		let filtered = previousTransactions;
+		if (activeFilters?.walletId) {
+			filtered = filtered.filter(transaction => transaction.wallet?.id === activeFilters.walletId);
+		}
+		if (activeFilters?.categoryIds?.length) {
+			filtered = filtered.filter(transaction => {
+				const categoryId = transaction.category?.id;
+				return categoryId ? activeFilters.categoryIds.includes(categoryId) : false;
+			});
+		}
+		return filtered;
+	}, [activeFilters, previousTransactions]);
+
+	const buildTotals = (transactions: TransactionResponse[]) => {
 		let income = 0;
 		let expense = 0;
-		filteredTransactions.forEach(transaction => {
+		transactions.forEach(transaction => {
 			const amount = Number(transaction.amount);
 			if (!Number.isFinite(amount)) return;
 			if (transaction.transactionType === "INCOME") {
@@ -224,10 +289,74 @@ const TransactionsPage = () => {
 			expense,
 			balance: income - expense,
 		};
+	};
+	const summaryTotals = useMemo(() => {
+		return buildTotals(filteredTransactions);
 	}, [filteredTransactions]);
+	const previousTotals = useMemo(() => buildTotals(filteredPreviousTransactions), [filteredPreviousTransactions]);
 	const incomeDisplay = getAmountDisplay(summaryTotals.income, "INCOME");
 	const expenseDisplay = getAmountDisplay(summaryTotals.expense, "EXPENSE");
 	const balanceDisplay = getAmountDisplay(summaryTotals.balance);
+
+	const periodLabel = getPeriodLabel(currentDate);
+	const previousMonthLabel = getMonthLabel(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+
+	const getDeltaBadge = (current: number, previous: number, kind: "income" | "expense" | "balance") => {
+		if (!Number.isFinite(previous) || previous === 0) {
+			return {
+				amountText: "▲ +R$ 0",
+				helperText: `(sem base em ${previousMonthLabel})`,
+				className: "text-muted-foreground",
+				icon: "",
+			};
+		}
+
+		const diff = current - previous;
+		const positive = diff >= 0;
+		const sign = diff >= 0 ? "+" : "-";
+		const icon = diff >= 0 ? "▲" : "▼";
+
+		const className = (() => {
+			if (!diff) return "text-muted-foreground";
+			if (kind === "expense") {
+				return positive ? "text-red-500" : "text-emerald-500";
+			}
+			return positive ? "text-emerald-500" : "text-red-500";
+		})();
+
+		if (diff === 0) {
+			return {
+				amountText: "▲ +R$ 0",
+				helperText: `(igual a ${previousMonthLabel})`,
+				className: "text-muted-foreground",
+				icon,
+			};
+		}
+
+		const multiplierRaw = Math.abs(diff) / Math.abs(previous);
+		const multiplier = Number.isFinite(multiplierRaw)
+			? Number(multiplierRaw.toFixed(1)).toString().replace(/\.0$/, "")
+			: null;
+		const percentRaw = (diff / previous) * 100;
+		const percent = Number.isFinite(percentRaw) ? Math.round(percentRaw) : null;
+		const relation =
+			kind === "balance" && percent !== null
+				? `(${Math.abs(percent)}% ${positive ? "maior" : "menor"} que ${previousMonthLabel})`
+				: multiplier
+					? `(${multiplier}x ${positive ? "maior" : "menor"} que ${previousMonthLabel})`
+					: `(vs ${previousMonthLabel})`;
+
+		return {
+			amountText: `${icon} ${sign}${formatCurrency(Math.abs(diff))}`,
+			helperText: relation,
+			className,
+			icon,
+		};
+	};
+
+	const incomeDelta = getDeltaBadge(summaryTotals.income, previousTotals.income, "income");
+	const expenseDelta = getDeltaBadge(summaryTotals.expense, previousTotals.expense, "expense");
+	const balanceDelta = getDeltaBadge(summaryTotals.balance, previousTotals.balance, "balance");
 
 	const columns: ColumnDef<TransactionResponse>[] = [
 		{
@@ -429,6 +558,10 @@ const TransactionsPage = () => {
 				<>
 					<div className="mt-3 space-y-8">
 						<div className="space-y-3">
+							<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+								<span className="font-semibold text-foreground">Período</span>
+								<span>{periodLabel}</span>
+							</div>
 							<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 								<div className="rounded-xl border border-border/70 bg-background/80 p-6 shadow-sm">
 									<div className="flex items-center justify-between">
@@ -436,7 +569,15 @@ const TransactionsPage = () => {
 											<span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
 												<TrendingUp className="h-6 w-6" />
 											</span>
-											Receitas
+											<div className="flex flex-col">
+												<span>Receitas</span>
+												<span className={`text-xs font-medium ${incomeDelta.className}`}>
+													{incomeDelta.amountText}
+												</span>
+												<span className="text-[11px] text-muted-foreground">
+													{incomeDelta.helperText}
+												</span>
+											</div>
 										</div>
 										<span className={`text-base font-semibold ${incomeDisplay.className}`}>
 											{incomeDisplay.text}
@@ -449,7 +590,15 @@ const TransactionsPage = () => {
 											<span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-red-600">
 												<TrendingDown className="h-6 w-6" />
 											</span>
-											Despesas
+											<div className="flex flex-col">
+												<span>Despesas</span>
+												<span className={`text-xs font-medium ${expenseDelta.className}`}>
+													{expenseDelta.amountText}
+												</span>
+												<span className="text-[11px] text-muted-foreground">
+													{expenseDelta.helperText}
+												</span>
+											</div>
 										</div>
 										<span className={`text-base font-semibold ${expenseDisplay.className}`}>
 											{expenseDisplay.text}
@@ -462,7 +611,15 @@ const TransactionsPage = () => {
 											<span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/10 text-blue-600">
 												<Wallet className="h-6 w-6" />
 											</span>
-											Saldo
+											<div className="flex flex-col">
+												<span>Saldo</span>
+												<span className={`text-xs font-medium ${balanceDelta.className}`}>
+													{balanceDelta.amountText}
+												</span>
+												<span className="text-[11px] text-muted-foreground">
+													{balanceDelta.helperText}
+												</span>
+											</div>
 										</div>
 										<span className={`text-base font-semibold ${balanceDisplay.className}`}>
 											{balanceDisplay.text}
