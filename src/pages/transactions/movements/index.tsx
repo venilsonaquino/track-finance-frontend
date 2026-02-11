@@ -331,12 +331,49 @@ const TransactionsPage = () => {
 	const previousMonthLabel = getMonthLabel(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
 
 	const getDeltaBadge = (current: number, previous: number, kind: "income" | "expense" | "balance") => {
-		if (!Number.isFinite(previous) || previous === 0) {
+		if (!Number.isFinite(previous)) {
 			return {
 				amountText: "▲ +R$ 0",
 				helperText: `(sem base em ${previousMonthLabel})`,
 				className: "text-muted-foreground",
 				icon: "",
+			};
+		}
+
+		if (previous === 0 && current === 0) {
+			return {
+				amountText: "▲ +R$ 0",
+				helperText: `(igual a ${previousMonthLabel})`,
+				className: "text-muted-foreground",
+				icon: "—",
+			};
+		}
+
+		if (previous === 0 && current !== 0) {
+			const diff = current;
+			const positive = diff > 0;
+			const sign = diff >= 0 ? "+" : "-";
+			const icon = diff >= 0 ? "▲" : "▼";
+			const className = (() => {
+				if (!diff) return "text-muted-foreground";
+				if (kind === "expense") {
+					return positive ? "text-red-500" : "text-emerald-500";
+				}
+				return positive ? "text-emerald-500" : "text-red-500";
+			})();
+
+			const helperText =
+				kind === "expense"
+					? `(novo gasto este mês)`
+					: kind === "income"
+						? `(nova receita este mês)`
+						: `(novo saldo este mês)`;
+
+			return {
+				amountText: `${icon} ${sign}${formatCurrency(Math.abs(diff))}`,
+				helperText,
+				className,
+				icon,
 			};
 		}
 
@@ -362,18 +399,25 @@ const TransactionsPage = () => {
 			};
 		}
 
+		const percentRaw = (diff / previous) * 100;
+		const percent = Number.isFinite(percentRaw) ? Math.round(percentRaw) : null;
 		const multiplierRaw = Math.abs(diff) / Math.abs(previous);
 		const multiplier = Number.isFinite(multiplierRaw)
 			? Number(multiplierRaw.toFixed(1)).toString().replace(/\.0$/, "")
 			: null;
-		const percentRaw = (diff / previous) * 100;
-		const percent = Number.isFinite(percentRaw) ? Math.round(percentRaw) : null;
-		const relation =
-			kind === "balance" && percent !== null
-				? `(${Math.abs(percent)}% ${positive ? "maior" : "menor"} que ${previousMonthLabel})`
-				: multiplier
-					? `(${multiplier}x ${positive ? "maior" : "menor"} que ${previousMonthLabel})`
-					: `(vs ${previousMonthLabel})`;
+
+		const relation = (() => {
+			if (current === 0 && previous > 0 && percent !== null) {
+				return `(-100% vs ${previousMonthLabel})`;
+			}
+			if (kind === "balance" && percent !== null) {
+				return `(${Math.abs(percent)}% ${positive ? "maior" : "menor"} que ${previousMonthLabel})`;
+			}
+			if (multiplier) {
+				return `(${multiplier}x ${positive ? "maior" : "menor"} que ${previousMonthLabel})`;
+			}
+			return `(vs ${previousMonthLabel})`;
+		})();
 
 		return {
 			amountText: `${icon} ${sign}${formatCurrency(Math.abs(diff))}`,
