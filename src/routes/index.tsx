@@ -2,7 +2,6 @@ import Authentication from '@/pages/authentication'
 import { lazy } from 'react'
 import { Navigate, RouteProps } from 'react-router-dom'
 
-const Login = lazy(() => import('@/pages/authentication/Login'))
 const Error404 = lazy(() => import('@/pages/erros/Error404'))
 const Error500 = lazy(() => import('@/pages/erros/Error500'))
 const Dashboard = lazy(() => import('@/pages/dashboard'))
