@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
 	Sheet,
 	SheetContent,
@@ -10,22 +10,39 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Filter, X, Calendar, Tag, Check } from "lucide-react";
+import { Filter, X, Calendar, Tag, Check, Wallet, Clock } from "lucide-react";
 import { useCategories } from "../../hooks/use-categories";
+import { useWallets } from "../../hooks/use-wallets";
 import { DateUtils } from "@/utils/date-utils";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 
-interface FilterSheetProps {
-	onApplyFilters: (filters: {
-		startDate: string;
-		endDate: string;
-		categoryIds: string[];
-	}) => void;
+type TimelineFilter = "realizadas" | "futuras" | "todas";
+type PeriodPreset = "month" | "last30" | "custom";
+
+interface FiltersState {
+	startDate: string;
+	endDate: string;
+	categoryIds: string[];
+	timeline: TimelineFilter;
+	periodPreset: PeriodPreset;
+	walletId: string | null;
 }
 
-export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters }) => {
+interface FilterSheetProps {
+	onApplyFilters: (filters: FiltersState | null) => void;
+	activeFilters: FiltersState | null;
+}
+
+export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters, activeFilters }) => {
 	const { categories, loading: categoriesLoading } = useCategories();
+	const { wallets, loading: walletsLoading } = useWallets();
 	const [isOpen, setIsOpen] = useState(false);
 	
 	// Definir datas padrão do mês atual
@@ -33,24 +50,80 @@ export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters }) => {
 	const [startDate, setStartDate] = useState(defaultDates.startDate);
 	const [endDate, setEndDate] = useState(defaultDates.endDate);
 	const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-	const [activeFiltersCount, setActiveFiltersCount] = useState<number>(0);
+	const [timeline, setTimeline] = useState<TimelineFilter>("todas");
+	const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("month");
+	const [walletId, setWalletId] = useState<string>("all");
+	const [appliedFiltersCount, setAppliedFiltersCount] = useState<number>(0);
+
+	const activeFiltersCount = useMemo(() => {
+		const flags = [
+			periodPreset !== "month",
+			timeline !== "todas",
+			walletId !== "all",
+			selectedCategories.length > 0,
+		];
+		return flags.filter(Boolean).length;
+	}, [periodPreset, timeline, walletId, selectedCategories.length]);
+
+	const countFilters = (filters: FiltersState | null) => {
+		if (!filters) return 0;
+		const flags = [
+			filters.periodPreset !== "month",
+			filters.timeline !== "todas",
+			Boolean(filters.walletId),
+			filters.categoryIds.length > 0,
+		];
+		return flags.filter(Boolean).length;
+	};
+
+	useEffect(() => {
+		if (isOpen) return;
+		if (!activeFilters) {
+			setStartDate(defaultDates.startDate);
+			setEndDate(defaultDates.endDate);
+			setSelectedCategories([]);
+			setTimeline("todas");
+			setPeriodPreset("month");
+			setWalletId("all");
+			setAppliedFiltersCount(0);
+			return;
+		}
+		setStartDate(activeFilters.startDate);
+		setEndDate(activeFilters.endDate);
+		setSelectedCategories(activeFilters.categoryIds);
+		setTimeline(activeFilters.timeline);
+		setPeriodPreset(activeFilters.periodPreset);
+		setWalletId(activeFilters.walletId ?? "all");
+		setAppliedFiltersCount(countFilters(activeFilters));
+	}, [activeFilters, defaultDates.endDate, defaultDates.startDate, isOpen]);
 
 	const handleApplyFilters = () => {
-		onApplyFilters({
-			startDate: startDate || defaultDates.startDate,
-			endDate: endDate || defaultDates.endDate,
-			categoryIds: selectedCategories,
-		});
+		if (activeFiltersCount === 0) {
+			onApplyFilters(null);
+		} else {
+			onApplyFilters({
+				startDate: startDate || defaultDates.startDate,
+				endDate: endDate || defaultDates.endDate,
+				categoryIds: selectedCategories,
+				timeline,
+				periodPreset,
+				walletId: walletId === "all" ? null : walletId,
+			});
+		}
 		setIsOpen(false);
-		setActiveFiltersCount(selectedCategories.length);
+		setAppliedFiltersCount(activeFiltersCount);
 	};
 
 	const handleClearFilters = () => {
 		setStartDate(defaultDates.startDate);
 		setEndDate(defaultDates.endDate);
 		setSelectedCategories([]);
-		setActiveFiltersCount(0);
+		setTimeline("todas");
+		setPeriodPreset("month");
+		setWalletId("all");
 		setIsOpen(false);
+		onApplyFilters(null);
+		setAppliedFiltersCount(0);
 	};
 
 	const handleCategoryToggle = (categoryId: string) => {
@@ -61,7 +134,50 @@ export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters }) => {
 		);
 	};
 
-	const hasActiveFilters = startDate || endDate || selectedCategories.length > 0;
+	const handlePeriodPresetChange = (value: PeriodPreset) => {
+		setPeriodPreset(value);
+		if (value === "month") {
+			setStartDate(defaultDates.startDate);
+			setEndDate(defaultDates.endDate);
+			return;
+		}
+		if (value === "last30") {
+			const today = new Date();
+			const past = new Date();
+			past.setDate(today.getDate() - 29);
+			setStartDate(DateUtils.formatToISODate(past));
+			setEndDate(DateUtils.formatToISODate(today));
+		}
+	};
+
+	const formatMonthYear = (isoDate: string) => {
+		const date = new Date(`${isoDate}T00:00:00`);
+		const raw = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(date);
+		const normalized = raw.replace(" de ", " ");
+		return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+	};
+
+	const formatShortDate = (isoDate: string) => {
+		const date = new Date(`${isoDate}T00:00:00`);
+		return date.toLocaleDateString("pt-BR");
+	};
+
+	const periodSummary = useMemo(() => {
+		if (periodPreset === "last30") return "Últimos 30 dias";
+		if (periodPreset === "custom") {
+			return `${formatShortDate(startDate)} — ${formatShortDate(endDate)}`;
+		}
+		return formatMonthYear(startDate);
+	}, [periodPreset, startDate, endDate]);
+
+	const timelineSummary: Record<TimelineFilter, string> = {
+		realizadas: "Realizadas",
+		futuras: "Futuras",
+		todas: "Todas",
+	};
+
+	const hasActiveFilters = appliedFiltersCount > 0;
+	const hasDraftFilters = activeFiltersCount > 0;
 
 	return (
 		<Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -69,71 +185,150 @@ export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters }) => {
 				<Button variant="outline">
 					<Filter className="h-4 w-4 mr-2" />
 					Filtros
-					{hasActiveFilters && (
-						<Badge 
-							variant="secondary" 
-							className="ml-2 h-5 w-5 rounded-full p-0 text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-100"
-						>
-							{activeFiltersCount}
-						</Badge>
-					)}
+					{hasActiveFilters ? ` (${appliedFiltersCount})` : ""}
 				</Button>
 			</SheetTrigger>
 			<SheetContent side="right" className="w-[400px] sm:w-[480px] p-0">
 				<div className="flex flex-col h-full">
 					{/* Header */}
-					<SheetHeader className="px-6 py-4 border-b">
-						<SheetTitle className="text-lg font-semibold">Filtros</SheetTitle>
-						<p className="text-sm text-muted-foreground">
+					<SheetHeader className="px-4 py-4">
+						<div className="flex items-start justify-between">
+							<SheetTitle className="text-base font-semibold">Filtros</SheetTitle>
+							{hasActiveFilters && (
+								<Badge
+									variant="secondary"
+									className="text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-100"
+								>
+									{appliedFiltersCount} ativos
+								</Badge>
+							)}
+						</div>
+						<p className="text-xs text-muted-foreground">
 							Personalize sua visualização de transações
 						</p>
 					</SheetHeader>
 
 					{/* Content */}
-					<div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
-						{/* Date Range Section */}
-						<div className="space-y-4">
+					<div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+						{/* Timeline Section */}
+						<div className="space-y-3">
 							<div className="flex items-center space-x-2">
-								<Calendar className="h-4 w-4 text-muted-foreground" />
-								<h3 className="text-sm font-medium">Período</h3>
+								<Clock className="h-4 w-4 text-muted-foreground" />
+								<h3 className="text-xs font-medium text-muted-foreground">Linha do tempo</h3>
 							</div>
-							
-							<div className="grid grid-cols-2 gap-3">
-								<div className="space-y-2">
-									<Label htmlFor="start-date" className="text-xs font-medium text-muted-foreground">
-										Data inicial
-									</Label>
-									<Input
-										id="start-date"
-										type="date"
-										value={startDate}
-										onChange={(e) => setStartDate(e.target.value)}
-										className="h-9 text-sm"
-									/>
-								</div>
-								
-								<div className="space-y-2">
-									<Label htmlFor="end-date" className="text-xs font-medium text-muted-foreground">
-										Data final
-									</Label>
-									<Input
-										id="end-date"
-										type="date"
-										value={endDate}
-										onChange={(e) => setEndDate(e.target.value)}
-										className="h-9 text-sm"
-									/>
-								</div>
+							<div className="grid grid-cols-3 gap-2">
+								{([
+									{ value: "realizadas", label: "Realizadas" },
+									{ value: "futuras", label: "Futuras" },
+									{ value: "todas", label: "Todas" },
+								] as const).map(option => {
+									const isSelected = timeline === option.value;
+									return (
+										<button
+											key={option.value}
+											type="button"
+											onClick={() => setTimeline(option.value)}
+											className={`h-9 rounded-md border text-xs font-medium transition-colors ${
+												isSelected
+													? "border-blue-200 bg-blue-50 text-blue-700"
+													: "border-border text-muted-foreground hover:text-foreground"
+											}`}
+										>
+											{option.label}
+										</button>
+									);
+								})}
 							</div>
+							<p className="text-xs text-muted-foreground">
+								Inclui parcelas agendadas quando selecionado.
+							</p>
 						</div>
 
-						<Separator />
+						{/* Period Section */}
+						<div className="space-y-3">
+							<div className="flex items-center space-x-2">
+								<Calendar className="h-4 w-4 text-muted-foreground" />
+								<h3 className="text-xs font-medium text-muted-foreground">Período</h3>
+							</div>
+
+							<Select value={periodPreset} onValueChange={handlePeriodPresetChange}>
+								<SelectTrigger className="h-9">
+									<SelectValue placeholder="Selecionar período" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="month">Este mês</SelectItem>
+									<SelectItem value="last30">Últimos 30 dias</SelectItem>
+									<SelectItem value="custom">Personalizado</SelectItem>
+								</SelectContent>
+							</Select>
+
+							{periodPreset === "custom" && (
+								<div className="grid grid-cols-2 gap-3">
+									<div className="space-y-2">
+										<Label htmlFor="start-date" className="text-xs font-medium text-muted-foreground">
+											Data inicial
+										</Label>
+										<Input
+											id="start-date"
+											type="date"
+											value={startDate}
+											onChange={(e) => setStartDate(e.target.value)}
+											className="h-9 text-sm"
+										/>
+									</div>
+									
+									<div className="space-y-2">
+										<Label htmlFor="end-date" className="text-xs font-medium text-muted-foreground">
+											Data final
+										</Label>
+										<Input
+											id="end-date"
+											type="date"
+											value={endDate}
+											onChange={(e) => setEndDate(e.target.value)}
+											className="h-9 text-sm"
+										/>
+									</div>
+								</div>
+							)}
+						</div>
+
+						{/* Account Section */}
+						<div className="space-y-3">
+							<div className="flex items-center space-x-2">
+								<Wallet className="h-4 w-4 text-muted-foreground" />
+								<h3 className="text-xs font-medium text-muted-foreground">Conta</h3>
+							</div>
+							<Select
+								value={walletId}
+								onValueChange={setWalletId}
+								disabled={walletsLoading}
+							>
+								<SelectTrigger className="h-9">
+									<SelectValue placeholder="Todas as carteiras" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">Todas as carteiras</SelectItem>
+									{walletsLoading ? (
+										<SelectItem value="loading" disabled>Carregando...</SelectItem>
+									) : wallets.length === 0 ? (
+										<SelectItem value="empty" disabled>Nenhuma carteira encontrada</SelectItem>
+									) : (
+										wallets.map(wallet => (
+											<SelectItem key={wallet.id} value={wallet.id!}>
+												<span className="truncate">{wallet.name}</span>
+											</SelectItem>
+										))
+									)}
+								</SelectContent>
+							</Select>
+						</div>
 
 						{/* Categories Section */}
-						<div className="space-y-4">
+						<div className="space-y-3">
 							<div className="flex items-center space-x-2">
 								<Tag className="h-4 w-4 text-muted-foreground" />
-								<h3 className="text-sm font-medium">Categorias</h3>
+								<h3 className="text-xs font-medium text-muted-foreground">Categorias</h3>
 								{selectedCategories.length > 0 && (
 									<Badge variant="secondary" className="text-xs">
 										{selectedCategories.length} selecionada{selectedCategories.length > 1 ? 's' : ''}
@@ -186,13 +381,13 @@ export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters }) => {
 					</div>
 
 					{/* Footer */}
-					<SheetFooter className="px-6 py-4 border-t bg-muted/20">
+					<SheetFooter className="px-4 py-4 border-t">
 						<div className="flex gap-3 w-full">
 							<Button
 								variant="ghost"
 								onClick={handleClearFilters}
 								className="flex-1 h-10"
-								disabled={!hasActiveFilters}
+								disabled={!hasDraftFilters}
 							>
 								<X className="h-4 w-4 mr-2" />
 								Limpar
@@ -200,7 +395,6 @@ export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters }) => {
 							<Button 
 								onClick={handleApplyFilters} 
 								className="flex-1 h-10"
-								disabled={!hasActiveFilters}
 							>
 								Aplicar Filtros
 							</Button>

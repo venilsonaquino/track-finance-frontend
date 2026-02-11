@@ -1,7 +1,7 @@
 import PageBreadcrumbNav from "@/components/BreadcrumbNav";
 import { getAmountDisplay } from "@/utils/transaction-utils";
 import { useTransactions } from "../hooks/use-transactions";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,9 @@ const TransactionsPage = () => {
 		startDate: string;
 		endDate: string;
 		categoryIds: string[];
+		timeline: "realizadas" | "futuras" | "todas";
+		periodPreset: "month" | "last30" | "custom";
+		walletId: string | null;
 	} | null>(null);
 
 	const loadTransactions = useCallback(async () => {
@@ -75,7 +78,10 @@ const TransactionsPage = () => {
 		startDate: string;
 		endDate: string;
 		categoryIds: string[];
-	}) => {
+		timeline: "realizadas" | "futuras" | "todas";
+		periodPreset: "month" | "last30" | "custom";
+		walletId: string | null;
+	} | null) => {
 		setActiveFilters(filters);
 	};
 
@@ -125,8 +131,29 @@ const TransactionsPage = () => {
 	};
 
 	const allTransactions = transactionsData?.records?.flatMap(record => record.transactions) || [];
+	const filteredTransactions = useMemo(() => {
+		let filtered = allTransactions;
+		if (activeFilters?.walletId) {
+			filtered = filtered.filter(transaction => transaction.wallet?.id === activeFilters.walletId);
+		}
+		if (activeFilters?.timeline && activeFilters.timeline !== "todas") {
+			const today = DateUtils.formatToISODate(new Date());
+			if (activeFilters.timeline === "realizadas") {
+				filtered = filtered.filter(transaction => {
+					const depositedDate = DateUtils.formatToISODate(new Date(transaction.depositedDate));
+					return depositedDate <= today;
+				});
+			} else {
+				filtered = filtered.filter(transaction => {
+					const depositedDate = DateUtils.formatToISODate(new Date(transaction.depositedDate));
+					return depositedDate > today;
+				});
+			}
+		}
+		return filtered;
+	}, [activeFilters, allTransactions]);
 	const hasLoaded = transactionsData !== null;
-	const hasTransactions = allTransactions.length > 0;
+	const hasTransactions = filteredTransactions.length > 0;
 	const hasActiveFilters = Boolean(activeFilters);
 
 	const handleClearFilters = () => {
@@ -281,7 +308,7 @@ const TransactionsPage = () => {
 				<PageBreadcrumbNav items={[{ label: "Transações" }, { label: "Movimentações", href: "/transacoes/movimentacoes" }]} />
 				<div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-end sm:mb-4">
 					<CreateTransactionDialog onCreated={loadTransactions} defaultDate={currentDate} />
-					<FilterSheet onApplyFilters={handleApplyFilters} />
+					<FilterSheet onApplyFilters={handleApplyFilters} activeFilters={activeFilters} />
 				</div>
 			</div>
 
@@ -339,7 +366,7 @@ const TransactionsPage = () => {
 					</div>
 					<DataTable
 						columns={columns}
-						data={allTransactions}
+						data={filteredTransactions}
 					/>
 				</>
 			)}
