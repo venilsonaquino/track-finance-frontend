@@ -30,8 +30,11 @@ import { formatCurrency } from "@/utils/currency-utils";
 
 const TransactionsPage = () => {
 	const { getTransactions, deleteTransaction } = useTransactions();
-	const [transactionsData, setTransactionsData] = useState<TransactionsRecordResponse | null>(null);
-	const [previousTransactionsData, setPreviousTransactionsData] = useState<TransactionsRecordResponse | null>(null);
+	type TransactionsRangeResponse = TransactionsRecordResponse & {
+		period?: { year?: number; month?: number; start?: string; end?: string };
+	};
+	const [transactionsData, setTransactionsData] = useState<TransactionsRangeResponse | null>(null);
+	const [previousTransactionsData, setPreviousTransactionsData] = useState<TransactionsRangeResponse | null>(null);
 	const [currentDate, setCurrentDate] = useState(new Date());
 	const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 	const [editingTransaction, setEditingTransaction] = useState<TransactionResponse | null>(null);
@@ -47,7 +50,9 @@ const TransactionsPage = () => {
 		walletId: string | null;
 	} | null>(null);
 
-	const normalizeTransactionsResponse = (data: unknown): TransactionsRecordResponse => {
+	const normalizeTransactionsResponse = (
+		data: unknown
+	): TransactionsRecordResponse & { period?: { year?: number; month?: number; start?: string; end?: string } } => {
 		const emptySummary = {
 			current_balance: 0,
 			monthly_income: 0,
@@ -73,12 +78,14 @@ const TransactionsPage = () => {
 				transactions?: TransactionResponse[];
 				items?: TransactionResponse[];
 				data?: TransactionResponse[];
+				period?: { year?: number; month?: number; start?: string; end?: string };
 			};
 
 			if (Array.isArray(asAny.records)) {
 				return {
 					records: asAny.records,
 					summary: asAny.summary ?? emptySummary,
+					period: asAny.period,
 				};
 			}
 
@@ -93,6 +100,7 @@ const TransactionsPage = () => {
 						},
 					],
 					summary: emptySummary,
+					period: asAny.period,
 				};
 			}
 		}
@@ -134,6 +142,26 @@ const TransactionsPage = () => {
 			"Dezembro",
 		];
 		return `${months[date.getMonth()]} ${date.getFullYear()}`;
+	};
+
+	const getPeriodLabelFromResponse = (period?: { year?: number; month?: number }) => {
+		if (!period?.year || !period?.month) return null;
+		const months = [
+			"Janeiro",
+			"Fevereiro",
+			"Março",
+			"Abril",
+			"Maio",
+			"Junho",
+			"Julho",
+			"Agosto",
+			"Setembro",
+			"Outubro",
+			"Novembro",
+			"Dezembro",
+		];
+		const index = Math.max(1, Math.min(12, period.month)) - 1;
+		return `${months[index]} ${period.year}`;
 	};
 
 	const loadTransactions = useCallback(async () => {
@@ -298,7 +326,8 @@ const TransactionsPage = () => {
 	const expenseDisplay = getAmountDisplay(summaryTotals.expense, "EXPENSE");
 	const balanceDisplay = getAmountDisplay(summaryTotals.balance);
 
-	const periodLabel = getPeriodLabel(currentDate);
+	const responsePeriodLabel = getPeriodLabelFromResponse(transactionsData?.period);
+	const periodLabel = responsePeriodLabel ?? getPeriodLabel(currentDate);
 	const previousMonthLabel = getMonthLabel(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
 
 	const getDeltaBadge = (current: number, previous: number, kind: "income" | "expense" | "balance") => {
@@ -364,8 +393,20 @@ const TransactionsPage = () => {
 			header: () => <div className="text-left">Data</div>,
 			size: 100,
 			cell: ({ row }) => {
-				const date = new Date(row.getValue("depositedDate")).toLocaleDateString("pt-BR");
-				return <div className="text-left">{date}</div>;
+				const transaction = row.original as TransactionResponse & { date?: string };
+				const rawDate =
+					transaction.depositedDate ||
+					transaction.transactionDate ||
+					transaction.date ||
+					(row.getValue("depositedDate") as string | undefined);
+				if (!rawDate) {
+					return <div className="text-left">-</div>;
+				}
+				const parsed = new Date(rawDate);
+				if (Number.isNaN(parsed.getTime())) {
+					return <div className="text-left">-</div>;
+				}
+				return <div className="text-left">{parsed.toLocaleDateString("pt-BR")}</div>;
 			},
 		},
 		{
