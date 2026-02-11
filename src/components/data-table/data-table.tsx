@@ -105,13 +105,15 @@ export function DataTable<TData, TValue>({
 													{headerTitle}
 												</span>
 											)}
+										</div>
+										<div className="flex flex-wrap items-center gap-2">
 											{headerPeriod && (
 												<span className="text-sm text-muted-foreground">
 													{headerPeriod}
 												</span>
 											)}
+											{headerSheet && <div className="flex items-center">{headerSheet}</div>}
 										</div>
-										{headerSheet && <div className="flex items-center">{headerSheet}</div>}
 									</div>
 								</TableHead>
 							</TableRow>

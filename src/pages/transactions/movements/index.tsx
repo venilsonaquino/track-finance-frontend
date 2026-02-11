@@ -336,12 +336,8 @@ const TransactionsPage = () => {
 			<div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
 				<PageBreadcrumbNav items={[{ label: "Transações" }, { label: "Movimentações", href: "/transacoes/movimentacoes" }]} />
 				<div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-end sm:mb-4">
-					<Button variant="outline">
-						<Calendar className="h-4 w-4 mr-2" />
-						Fevereiro 2026
-					</Button>
+					<MonthYearPicker date={currentDate} onChange={handleMonthYearChange} />
 					<CreateTransactionDialog onCreated={loadTransactions} defaultDate={currentDate} />
-					{/* <FilterSheet onApplyFilters={handleApplyFilters} activeFilters={activeFilters} /> */}
 				</div>
 			</div>
 
@@ -395,12 +391,6 @@ const TransactionsPage = () => {
 			) : (
 				<>
 					<div className="mb-5 rounded-2xl py-5">
-						<div className="flex items-center justify-between">
-							<div>
-								<span className="text-base font-bold text-foreground">Período </span>
-								<span className="text-xs  tracking-[0.1em] text-muted-foreground">Fevereiro 2026</span>
-							</div>
-						</div>
 						<div className="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
 							<div className="rounded-xl border bg-background/70 p-6 shadow-sm">
 								<div className="flex items-center justify-between">
@@ -444,8 +434,8 @@ const TransactionsPage = () => {
 						</div>
 					</div>
 					<DataTable
-						headerPeriod="Fevereiro 2026"
 						headerTitle="Resumo do mês"
+						headerPeriod={<MonthYearPicker date={currentDate} onChange={handleMonthYearChange} />}
 						headerSheet={<FilterSheet onApplyFilters={handleApplyFilters} activeFilters={activeFilters} />}
 						columns={columns}
 						data={filteredTransactions}
