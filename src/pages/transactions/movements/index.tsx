@@ -4,7 +4,7 @@ import { useTransactions } from "../hooks/use-transactions";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
@@ -27,9 +27,11 @@ import { EditTransactionDialog } from "./components/EditTransactionDialog";
 import { DeleteTransactionDialog } from "./components/DeleteTransactionDialog";
 import { toast } from "sonner";
 import { formatCurrency } from "@/utils/currency-utils";
+import { useCategories } from "../hooks/use-categories";
 
 const TransactionsPage = () => {
 	const { getTransactions, deleteTransaction } = useTransactions();
+	const { categories } = useCategories();
 	type TransactionsRangeResponse = TransactionsRecordResponse & {
 		period?: { year?: number; month?: number; start?: string; end?: string };
 	};
@@ -277,6 +279,10 @@ const TransactionsPage = () => {
 		return filtered;
 	}, [activeFilters, allTransactions]);
 
+	const categoryById = useMemo(() => {
+		return new Map((categories ?? []).map(category => [category.id, category]));
+	}, [categories]);
+
 	const previousTransactions = previousTransactionsData?.records?.flatMap(record => record.transactions) || [];
 	const filteredPreviousTransactions = useMemo(() => {
 		let filtered = previousTransactions;
@@ -479,6 +485,9 @@ const TransactionsPage = () => {
 			cell: ({ row }) => {
 				const category = row.getValue("category") as any;
 				if (!category) return <div className="text-center">-</div>;
+				const resolvedCategory = category?.id ? categoryById.get(category.id) ?? category : category;
+				const hasColor = Boolean(resolvedCategory?.color);
+				const hasIcon = Boolean(resolvedCategory?.icon);
 
 				return (
 					<div
@@ -487,17 +496,23 @@ const TransactionsPage = () => {
 					>
 						<div className="flex-shrink-0 w-10 flex justify-center items-center">
 							<div
-								className="w-10 h-10 rounded-full flex items-center justify-center text-white"
-								style={{ backgroundColor: category.color }}
+								className={`w-10 h-10 rounded-full flex items-center justify-center ${
+									hasColor ? "text-white" : "bg-muted text-muted-foreground"
+								}`}
+								style={hasColor ? { backgroundColor: resolvedCategory.color } : undefined}
 							>
-								<DynamicIcon
-									name={category.icon as any}
-									size={22}
-									className="text-white"
-								/>
+								{hasIcon ? (
+									<DynamicIcon
+										name={resolvedCategory.icon as any}
+										size={22}
+										className="text-white"
+									/>
+								) : (
+									<Tag className="h-5 w-5" />
+								)}
 							</div>
 						</div>
-						<span className="ml-2 text-sm truncate">{category.name}</span>
+						<span className="ml-2 text-sm truncate">{resolvedCategory.name}</span>
 					</div>
 				);
 			},
