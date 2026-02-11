@@ -394,9 +394,6 @@ const TransactionsPage = () => {
 				</div>
 			) : (
 				<>
-					{/* <div className="flex items-center gap-2 mb-4">
-						<MonthYearPicker date={currentDate} onChange={handleMonthYearChange} />
-					</div> */}
 					<div className="mb-5 rounded-2xl py-5">
 						<div className="flex items-center justify-between">
 							<div>
@@ -447,6 +444,9 @@ const TransactionsPage = () => {
 						</div>
 					</div>
 					<DataTable
+						headerPeriod="Fevereiro 2026"
+						headerTitle="Resumo do mês"
+						headerSheet={<FilterSheet onApplyFilters={handleApplyFilters} activeFilters={activeFilters} />}
 						columns={columns}
 						data={filteredTransactions}
 					/>

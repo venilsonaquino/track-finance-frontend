@@ -7,6 +7,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem } from "@radix-ui/react-dropdown-menu";
 import {
 	useReactTable,
 	getCoreRowModel,
@@ -23,9 +24,19 @@ interface DataTableProps<TData, TValue> {
 	columns: ColumnDef<TData, TValue>[];
 	data: TData[];
 	toolbar?: React.ReactNode;
+	headerTitle?: string;
+	headerPeriod?: React.ReactNode;
+	headerSheet?: React.ReactNode;
 }
 
-export function DataTable<TData, TValue>({ columns, data, toolbar }: DataTableProps<TData, TValue>) {
+export function DataTable<TData, TValue>({
+	columns,
+	data,
+	toolbar,
+	headerTitle,
+	headerPeriod,
+	headerSheet,
+}: DataTableProps<TData, TValue>) {
 	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
 	const table = useReactTable({
@@ -84,6 +95,27 @@ export function DataTable<TData, TValue>({ columns, data, toolbar }: DataTablePr
 			<div className="rounded-md border overflow-x-auto">
 				<Table className="min-w-[100px]">
 					<TableHeader>
+						{(headerTitle || headerPeriod || headerSheet) && (
+							<TableRow>
+								<TableHead colSpan={columns.length} className="p-0">
+									<div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+										<div className="flex items-center gap-3">
+											{headerTitle && (
+												<span className="text-base font-semibold text-foreground">
+													{headerTitle}
+												</span>
+											)}
+											{headerPeriod && (
+												<span className="text-sm text-muted-foreground">
+													{headerPeriod}
+												</span>
+											)}
+										</div>
+										{headerSheet && <div className="flex items-center">{headerSheet}</div>}
+									</div>
+								</TableHead>
+							</TableRow>
+						)}
 						{table.getHeaderGroups().map((headerGroup) => (
 							<TableRow key={headerGroup.id}>
 								{headerGroup.headers.map((header) => (
