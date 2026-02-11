@@ -252,9 +252,9 @@ export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters, active
 							</div>
 
 							<Select value={periodPreset} onValueChange={handlePeriodPresetChange}>
-								<SelectTrigger className="h-9">
-									<SelectValue placeholder="Selecionar período" />
-								</SelectTrigger>
+							<SelectTrigger className="h-9 w-full">
+								<SelectValue placeholder="Selecionar período" />
+							</SelectTrigger>
 								<SelectContent>
 									<SelectItem value="month">Este mês</SelectItem>
 									<SelectItem value="last30">Últimos 30 dias</SelectItem>
@@ -304,9 +304,9 @@ export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters, active
 								onValueChange={setWalletId}
 								disabled={walletsLoading}
 							>
-								<SelectTrigger className="h-9">
-									<SelectValue placeholder="Todas as carteiras" />
-								</SelectTrigger>
+							<SelectTrigger className="h-9 w-full">
+								<SelectValue placeholder="Todas as carteiras" />
+							</SelectTrigger>
 								<SelectContent>
 									<SelectItem value="all">Todas as carteiras</SelectItem>
 									{walletsLoading ? (
