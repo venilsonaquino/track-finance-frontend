@@ -18,6 +18,7 @@ import {
 	VisibilityState,
 } from "@tanstack/react-table";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface DataTableProps<TData, TValue> {
 	columns: ColumnDef<TData, TValue>[];
@@ -26,6 +27,7 @@ interface DataTableProps<TData, TValue> {
 	headerTitle?: string;
 	headerPeriod?: React.ReactNode;
 	headerSheet?: React.ReactNode;
+	variant?: "default" | "budget";
 }
 
 export function DataTable<TData, TValue>({
@@ -35,8 +37,10 @@ export function DataTable<TData, TValue>({
 	headerTitle,
 	headerPeriod,
 	headerSheet,
+	variant = "default",
 }: DataTableProps<TData, TValue>) {
 	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+	const isBudget = variant === "budget";
 
 	const table = useReactTable({
 		data,
@@ -53,7 +57,7 @@ export function DataTable<TData, TValue>({
 
 	return (
 		<>
-			<div className="flex items-center justify-center py-4 ">
+			<div className="">
 				{/* <Input
 					placeholder="Filtrar por nome..."
 					value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
@@ -91,7 +95,12 @@ export function DataTable<TData, TValue>({
 					</DropdownMenuContent>
 				</DropdownMenu> */}
 			</div>
-			<div className="rounded-md border overflow-x-auto">
+			<div
+				className={cn(
+					"border overflow-x-auto",
+					isBudget ? "rounded-xl bg-background/40 shadow-sm" : "rounded-md"
+				)}
+			>
 				<Table className="min-w-[100px]">
 					<TableHeader>
 						{(headerTitle || headerPeriod || headerSheet) && (
@@ -118,9 +127,17 @@ export function DataTable<TData, TValue>({
 							</TableRow>
 						)}
 						{table.getHeaderGroups().map((headerGroup) => (
-							<TableRow key={headerGroup.id}>
+							<TableRow
+								key={headerGroup.id}
+								className={cn(
+									isBudget && "bg-zinc-900/90 text-white hover:bg-zinc-900/90"
+								)}
+							>
 								{headerGroup.headers.map((header) => (
-									<TableHead key={header.id}>
+									<TableHead
+										key={header.id}
+										className={cn(isBudget && "text-white")}
+									>
 										{header.isPlaceholder
 											? null
 											: flexRender(header.column.columnDef.header, header.getContext())}

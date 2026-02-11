@@ -2,10 +2,9 @@ import PageBreadcrumbNav from "@/components/BreadcrumbNav";
 import { getAmountDisplay } from "@/utils/transaction-utils";
 import { useTransactions } from "../hooks/use-transactions";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
-import { HelpCircle, MoreVertical, TrendingDown, TrendingUp, Upload, Wallet } from "lucide-react";
+import { MoreVertical, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
@@ -29,7 +28,6 @@ import { DeleteTransactionDialog } from "./components/DeleteTransactionDialog";
 import { toast } from "sonner";
 
 const TransactionsPage = () => {
-	const navigate = useNavigate();
 	const { getTransactions, deleteTransaction } = useTransactions();
 	const [transactionsData, setTransactionsData] = useState<TransactionsRecordResponse | null>(null);
 	const [currentDate, setCurrentDate] = useState(new Date());
@@ -230,17 +228,6 @@ const TransactionsPage = () => {
 	const incomeDisplay = getAmountDisplay(summaryTotals.income, "INCOME");
 	const expenseDisplay = getAmountDisplay(summaryTotals.expense, "EXPENSE");
 	const balanceDisplay = getAmountDisplay(summaryTotals.balance);
-	const hasLoaded = transactionsData !== null;
-	const hasTransactions = filteredTransactions.length > 0;
-	const hasActiveFilters = Boolean(activeFilters);
-
-	const handleClearFilters = () => {
-		setActiveFilters(null);
-	};
-
-	const handleImportTransactions = () => {
-		navigate("/transacoes/importar");
-	};
 
 	const columns: ColumnDef<TransactionResponse>[] = [
 		{
@@ -382,7 +369,7 @@ const TransactionsPage = () => {
 
 	return (
 		<>
-			<div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+			<div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
 				<PageBreadcrumbNav items={[{ label: "Transações" }, { label: "Movimentações", href: "/transacoes/movimentacoes" }]} />
 				<div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-end sm:mb-4">
 					<MonthYearPicker date={currentDate} onChange={handleMonthYearChange} />
@@ -440,56 +427,70 @@ const TransactionsPage = () => {
 				</div>
 			) : ( */}
 				<>
-					<div className="mb-5 rounded-2xl py-5">
-						<div className="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
-							<div className="rounded-xl border bg-background/70 p-6 shadow-sm">
-								<div className="flex items-center justify-between">
-									<div className="flex items-center gap-3 text-base font-semibold text-foreground">
-										<span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
-											<TrendingUp className="h-7 w-7" />
+					<div className="mt-3 space-y-8">
+						<div className="space-y-3">
+							<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+								<div className="rounded-xl border border-border/70 bg-background/80 p-6 shadow-sm">
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-3 text-base font-semibold text-foreground">
+											<span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+												<TrendingUp className="h-6 w-6" />
+											</span>
+											Receitas
+										</div>
+										<span className={`text-base font-semibold ${incomeDisplay.className}`}>
+											{incomeDisplay.text}
 										</span>
-										Receitas
 									</div>
-									<span className={`text-base font-semibold ${incomeDisplay.className}`}>
-										{incomeDisplay.text}
-									</span>
 								</div>
-							</div>
-							<div className="rounded-xl border bg-background/70 p-6 shadow-sm">
-								<div className="flex items-center justify-between">
-									<div className="flex items-center gap-3 text-base font-semibold text-foreground">
-										<span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-600">
-											<TrendingDown className="h-7 w-7" />
+								<div className="rounded-xl border border-border/70 bg-background/80 p-6 shadow-sm">
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-3 text-base font-semibold text-foreground">
+											<span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-red-600">
+												<TrendingDown className="h-6 w-6" />
+											</span>
+											Despesas
+										</div>
+										<span className={`text-base font-semibold ${expenseDisplay.className}`}>
+											{expenseDisplay.text}
 										</span>
-										Despesas
 									</div>
-									<span className={`text-base font-semibold ${expenseDisplay.className}`}>
-										{expenseDisplay.text}
-									</span>
 								</div>
-							</div>
-							<div className="rounded-xl border bg-background/70 p-6 shadow-sm">
-								<div className="flex items-center justify-between">
-									<div className="flex items-center gap-3 text-base font-semibold text-foreground">
-										<span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-blue-500/10 text-blue-600">
-											<Wallet className="h-7 w-7" />
+								<div className="rounded-xl border border-border/70 bg-background/80 p-6 shadow-sm">
+									<div className="flex items-center justify-between">
+										<div className="flex items-center gap-3 text-base font-semibold text-foreground">
+											<span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/10 text-blue-600">
+												<Wallet className="h-6 w-6" />
+											</span>
+											Saldo
+										</div>
+										<span className={`text-base font-semibold ${balanceDisplay.className}`}>
+											{balanceDisplay.text}
 										</span>
-										Saldo
 									</div>
-									<span className={`text-base font-semibold ${balanceDisplay.className}`}>
-										{balanceDisplay.text}
-									</span>
 								</div>
 							</div>
 						</div>
+
+						<div className="space-y-3">
+							<div className="flex flex-wrap items-center gap-3">
+								<div className="flex items-center gap-2">
+									<span className="tracking-wide text-md font-bold text-foreground">
+										Resumo do mês
+									</span>
+								</div>
+								<div className="ml-auto flex flex-wrap items-center gap-2">
+									<MonthYearPicker date={currentDate} onChange={handleMonthYearChange} />
+									<FilterSheet onApplyFilters={handleApplyFilters} activeFilters={activeFilters} />
+								</div>
+							</div>
+							<DataTable
+								variant="budget"
+								columns={columns}
+								data={filteredTransactions}
+							/>
+						</div>
 					</div>
-					<DataTable
-						headerTitle="Resumo do mês"
-						headerPeriod={<MonthYearPicker date={currentDate} onChange={handleMonthYearChange} />}
-						headerSheet={<FilterSheet onApplyFilters={handleApplyFilters} activeFilters={activeFilters} />}
-						columns={columns}
-						data={filteredTransactions}
-					/>
 				</>
 		 	{/* )
 		 } */}
