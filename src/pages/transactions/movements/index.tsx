@@ -397,14 +397,14 @@ const TransactionsPage = () => {
 					{/* <div className="flex items-center gap-2 mb-4">
 						<MonthYearPicker date={currentDate} onChange={handleMonthYearChange} />
 					</div> */}
-					<div className="mb-5 rounded-2xl px-6 py-5">
+					<div className="mb-5 rounded-2xl py-5">
 						<div className="flex items-center justify-between">
 							<div>
-								<div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Período</div>
-								<div className="text-base font-semibold text-foreground">Fevereiro 2026</div>
+								<span className="text-base font-bold text-foreground">Período </span>
+								<span className="text-xs  tracking-[0.1em] text-muted-foreground">Fevereiro 2026</span>
 							</div>
 						</div>
-						<div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+						<div className="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
 							<div className="rounded-xl border bg-background/70 p-6 shadow-sm">
 								<div className="flex items-center justify-between">
 									<div className="flex items-center gap-3 text-base font-semibold text-foreground">
