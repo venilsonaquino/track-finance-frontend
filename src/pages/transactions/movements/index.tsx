@@ -1,5 +1,5 @@
 import PageBreadcrumbNav from "@/components/BreadcrumbNav";
-import { formatCurrency } from "@/utils/currency-utils";
+import { getAmountDisplay } from "@/utils/transaction-utils";
 import { useTransactions } from "../hooks/use-transactions";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -225,12 +225,16 @@ const TransactionsPage = () => {
 			size: 120,
 			cell: ({ row }) => {
 				const amount = Number(row.getValue("amount"));
-				const isNegative = amount < 0;
+				const transaction = row.original as { transactionType?: "INCOME" | "EXPENSE" | "TRANSFER" };
+				const { text: amountText, className: amountClass } = getAmountDisplay(
+					amount,
+					transaction.transactionType
+				);
 				
 				return (
 					<div className="text-right">
-						<span className={isNegative ? "text-red-500" : "text-green-500"}>
-							{formatCurrency(amount)}
+						<span className={amountClass}>
+							{amountText}
 						</span>
 					</div>
 				);

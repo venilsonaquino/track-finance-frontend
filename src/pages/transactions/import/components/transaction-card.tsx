@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { CheckCircle2, Save } from "lucide-react";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
-import { formatCurrency } from "@/utils/currency-utils";
+import { getAmountDisplay } from "@/utils/transaction-utils";
 import { WalletResponse } from "@/api/dtos/wallet/wallet-response";
 import { CategoryResponse } from "@/api/dtos/category/category-response";
 import { Button } from "@/components/ui/button";
@@ -77,16 +77,13 @@ const TransactionCard = React.memo(({
     }
   }
 
-  const isNegative = Number(transaction.amount) < 0;
   const isDuplicate = transaction.isFitIdAlreadyExists;
 
-  const amountTextColor = isNegative
-    ? isDuplicate
-      ? "text-destructive/70"
-      : "text-destructive"
-    : isDuplicate
-      ? "text-emerald-500/70"
-      : "text-emerald-500";
+  const { text: amountText, className: amountClass } = getAmountDisplay(
+    Number(transaction.amount),
+    transaction.transactionType
+  );
+  const amountTextColor = isDuplicate ? `${amountClass} opacity-70` : amountClass;
 
   return (
     <Card
@@ -142,7 +139,7 @@ const TransactionCard = React.memo(({
           </div>
         </div>
         <p className={`text-lg font-semibold whitespace-nowrap ${amountTextColor}`}>
-          {formatCurrency(Number(transaction.amount))}
+          {amountText}
         </p>
       </div>
 
