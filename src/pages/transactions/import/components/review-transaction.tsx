@@ -66,7 +66,6 @@ export const ReviewTransaction = ({ transactions, onCancel, setImportedTransacti
 	
 		try {
 			const transactionsToSave: TransactionRequest[] = transactions.map((transaction) => {
-				const transferType = (transaction.transferType || "").toUpperCase();
 				const amountValue = Number(transaction.amount);
 				const payload: TransactionRequest = {
 					depositedDate: transaction.depositedDate,
@@ -74,9 +73,7 @@ export const ReviewTransaction = ({ transactions, onCancel, setImportedTransacti
 					walletId: transaction.wallet?.id!,
 					categoryId: transaction.category?.id!,
 					amount: amountValue,
-					transactionType: transferType === "TRANSFER"
-						? "TRANSFER"
-						: amountValue < 0
+					transactionType: amountValue < 0
 							? "EXPENSE"
 							: "INCOME",
 				};

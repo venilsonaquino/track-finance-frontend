@@ -150,32 +150,6 @@ export const FilterSheet: React.FC<FilterSheetProps> = ({ onApplyFilters, active
 		}
 	};
 
-	const formatMonthYear = (isoDate: string) => {
-		const date = new Date(`${isoDate}T00:00:00`);
-		const raw = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(date);
-		const normalized = raw.replace(" de ", " ");
-		return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
-	};
-
-	const formatShortDate = (isoDate: string) => {
-		const date = new Date(`${isoDate}T00:00:00`);
-		return date.toLocaleDateString("pt-BR");
-	};
-
-	const periodSummary = useMemo(() => {
-		if (periodPreset === "last30") return "Últimos 30 dias";
-		if (periodPreset === "custom") {
-			return `${formatShortDate(startDate)} — ${formatShortDate(endDate)}`;
-		}
-		return formatMonthYear(startDate);
-	}, [periodPreset, startDate, endDate]);
-
-	const timelineSummary: Record<TimelineFilter, string> = {
-		realizadas: "Realizadas",
-		futuras: "Futuras",
-		todas: "Todas",
-	};
-
 	const hasActiveFilters = appliedFiltersCount > 0;
 	const hasDraftFilters = activeFiltersCount > 0;
 

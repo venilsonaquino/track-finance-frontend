@@ -50,7 +50,6 @@ const TransactionCard = React.memo(({
 
   const handleSave = async (transaction: TransactionResponse) => {
     try {
-      const transferType = (transaction.transferType || "").toUpperCase();
       const amountValue = Number(transaction.amount);
       const transactionRequest: TransactionRequest = {
         depositedDate: transaction.depositedDate,
@@ -58,9 +57,7 @@ const TransactionCard = React.memo(({
         walletId: transaction.wallet?.id!,
         categoryId: transaction.category?.id!,
         amount: amountValue,
-        transactionType: transferType === "TRANSFER"
-          ? "TRANSFER"
-          : amountValue < 0
+        transactionType: amountValue < 0
             ? "EXPENSE"
             : "INCOME",
       };
