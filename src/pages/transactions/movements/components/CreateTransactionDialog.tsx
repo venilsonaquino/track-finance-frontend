@@ -26,7 +26,6 @@ import { toast } from "sonner";
 import { IntervalType } from "@/types/Interval-type ";
 import { DateUtils } from "@/utils/date-utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatCurrency, maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 import { createMovement } from "@/features/movements/services/movementService";
@@ -99,34 +98,36 @@ const InstallmentDetails = ({
 	items: InstallmentItem[];
 	totalAmount: number;
 }) => (
-	<Popover open={open} onOpenChange={onOpenChange}>
-		<PopoverTrigger asChild>
+	<Collapsible open={open} onOpenChange={onOpenChange} className="w-full">
+		<CollapsibleTrigger asChild>
 			<Button
 				type="button"
-				aria-label="Ver detalhes do parcelamento"
-				variant="ghost"
-				size="icon"
-				className="shrink-0 text-muted-foreground hover:text-foreground"
+				aria-label="Alternar detalhes do parcelamento"
+				variant="outline"
+				size="sm"
+				className="w-full sm:w-auto"
 			>
-				<ChevronRight className="h-4 w-4" />
+				Detalhar parcelas
+				<ChevronRight className={`ml-2 h-4 w-4 transition-transform ${open ? "rotate-90" : ""}`} />
 			</Button>
-		</PopoverTrigger>
-		<PopoverContent align="end" className="w-72 p-3">
-			<div className="text-sm font-medium">Parcelamento</div>
-			<div className="mt-2 max-h-48 space-y-1 overflow-auto text-xs text-muted-foreground">
-				{items.map(item => (
-					<div key={item.index} className="flex items-center justify-between">
-						<span>{item.index}ª parcela • {item.date}</span>
-						<span>{formatCurrency(item.amount)}</span>
-					</div>
-				))}
+		</CollapsibleTrigger>
+		<CollapsibleContent className="mt-3 space-y-3">
+			<div className="max-h-64 overflow-y-auto pr-1">
+				<div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
+					{items.map(item => (
+						<div key={item.index} className="flex items-center justify-between rounded-md border px-2 py-1">
+							<span>{item.index}ª parcela • {item.date}</span>
+							<span className="font-medium text-foreground">{formatCurrency(item.amount)}</span>
+						</div>
+					))}
+				</div>
 			</div>
-			<div className="mt-2 flex items-center justify-between border-t pt-2 text-xs">
+			<div className="flex items-center justify-between border-t pt-3 text-sm">
 				<span className="text-muted-foreground">Total</span>
-				<span className="font-medium">{formatCurrency(totalAmount)}</span>
+				<span className="font-semibold">{formatCurrency(totalAmount)}</span>
 			</div>
-		</PopoverContent>
-	</Popover>
+		</CollapsibleContent>
+	</Collapsible>
 );
 
 const intervalOptions: { label: string; value: IntervalType }[] = [
@@ -669,15 +670,17 @@ export const CreateTransactionDialog = ({
 														</SelectContent>
 													</Select>
 												</div>
-												{installmentPreview.canShow && (
+											</div>
+											{installmentPreview.canShow && (
+												<div className="w-full">
 													<InstallmentDetails
 														open={isInstallmentDetailsOpen}
 														onOpenChange={setIsInstallmentDetailsOpen}
 														items={installmentPreview.items}
 														totalAmount={installmentPreview.totalAmount}
 													/>
-												)}
-											</div>
+												</div>
+											)}
 										</div>
 									)}
 								</CollapsibleContent>
