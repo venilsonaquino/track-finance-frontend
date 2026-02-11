@@ -484,27 +484,22 @@ const TransactionsPage = () => {
 				const hidePaidBadge = activeFilters?.timeline === "realizadas";
 				
 				return (
-					<div className="text-center">
-						<span
-							title={description}
-							className="block truncate"
-						>
+					<div className="flex items-center justify-center gap-2 text-center">
+						<span title={description} className="truncate">
 							{description}
 						</span>
-						<span className="ml-2 inline-flex items-center gap-2 align-middle">
-							{isScheduled ? (
-								<>
-									<Clock className="h-3 w-3 text-muted-foreground" />
-									<Badge variant="secondary" className="text-[10px] text-muted-foreground" title="Ainda não debitada">
-										Agendada
-									</Badge>
-								</>
-							) : !hidePaidBadge ? (
-								<Badge className="text-[10px] bg-blue-500/15 text-blue-600 hover:bg-blue-500/15">
-									Paga
+						{isScheduled ? (
+							<>
+								<Clock className="h-3 w-3 text-muted-foreground" />
+								<Badge variant="secondary" className="text-[10px] text-muted-foreground" title="Ainda não debitada">
+									Agendada
 								</Badge>
-							) : null}
-						</span>
+							</>
+						) : !hidePaidBadge ? (
+							<Badge className="text-[10px] bg-blue-500/15 text-blue-600 hover:bg-blue-500/15">
+								Paga
+							</Badge>
+						) : null}
 					</div>
 				);
 			},
