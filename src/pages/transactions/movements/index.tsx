@@ -26,6 +26,7 @@ import { FilterSheet } from "./components/FilterSheet";
 import { CreateTransactionDialog } from "./components/CreateTransactionDialog";
 import { EditTransactionDialog } from "./components/EditTransactionDialog";
 import { DeleteTransactionDialog } from "./components/DeleteTransactionDialog";
+import { ReverseTransactionDialog } from "./components/ReverseTransactionDialog";
 import { toast } from "sonner";
 import { formatCurrency } from "@/utils/currency-utils";
 import { useCategories } from "../hooks/use-categories";
@@ -46,6 +47,9 @@ const TransactionsPage = () => {
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [deletingTransaction, setDeletingTransaction] = useState<TransactionResponse | null>(null);
 	const [isDeleting, setIsDeleting] = useState(false);
+	const [isReverseDialogOpen, setIsReverseDialogOpen] = useState(false);
+	const [reversingTransaction, setReversingTransaction] = useState<TransactionResponse | null>(null);
+	const [isReversing, setIsReversing] = useState(false);
 	const [activeFilters, setActiveFilters] = useState<{
 		startDate: string;
 		endDate: string;
@@ -244,6 +248,22 @@ const TransactionsPage = () => {
 		}
 	};
 
+	const handleOpenReverse = (transaction: TransactionResponse) => {
+		if (isReversedTransaction(transaction)) {
+			toast.info("Esta movimentação já está estornada.");
+			return;
+		}
+		setReversingTransaction(transaction);
+		setIsReverseDialogOpen(true);
+	};
+
+	const handleReverseDialogChange = (open: boolean) => {
+		setIsReverseDialogOpen(open);
+		if (!open) {
+			setReversingTransaction(null);
+		}
+	};
+
 	const handleEditDialogChange = (open: boolean) => {
 		setIsEditDialogOpen(open);
 		if (!open) {
@@ -320,23 +340,27 @@ const TransactionsPage = () => {
 		!transaction.isRecurring &&
 		!transaction.isInstallment;
 
-	const handleReverseTransaction = async (transaction: TransactionResponse) => {
-		if (!transaction.id) {
+	const handleConfirmReverse = async () => {
+		if (!reversingTransaction?.id) {
 			toast.error("Não foi possível estornar esta movimentação.");
 			return;
 		}
-		if (isReversedTransaction(transaction)) {
+		if (isReversedTransaction(reversingTransaction)) {
 			toast.info("Esta movimentação já está estornada.");
 			return;
 		}
 
+		setIsReversing(true);
 		try {
-			await reverseTransaction(transaction.id);
+			await reverseTransaction(reversingTransaction.id);
 			toast.success("Movimentação estornada com sucesso.");
+			handleReverseDialogChange(false);
 			await loadTransactions();
 		} catch (error) {
 			console.error(error);
 			toast.error("Não foi possível estornar a movimentação.");
+		} finally {
+			setIsReversing(false);
 		}
 	};
 
@@ -345,6 +369,7 @@ const TransactionsPage = () => {
 		let expense = 0;
 		transactions.forEach(transaction => {
 			if (isScheduledOccurrence(transaction)) return;
+			if (isReversedTransaction(transaction)) return;
 			const amount = Number(transaction.amount);
 			if (!Number.isFinite(amount)) return;
 			if (transaction.transactionType === "INCOME") {
@@ -656,7 +681,7 @@ const TransactionsPage = () => {
 								{canUseSimplePaidActions && (
 									<DropdownMenuItem
 										disabled={isReversed}
-										onClick={() => void handleReverseTransaction(transaction)}
+										onClick={() => handleOpenReverse(transaction)}
 									>
 										<Undo2 className="mr-2 h-4 w-4" />
 										Estornar
@@ -842,6 +867,13 @@ const TransactionsPage = () => {
 				transaction={deletingTransaction}
 				onConfirm={handleConfirmDelete}
 				loading={isDeleting}
+			/>
+			<ReverseTransactionDialog
+				open={isReverseDialogOpen}
+				onOpenChange={handleReverseDialogChange}
+				transaction={reversingTransaction}
+				onConfirm={handleConfirmReverse}
+				loading={isReversing}
 			/>
 		</>
 	);
