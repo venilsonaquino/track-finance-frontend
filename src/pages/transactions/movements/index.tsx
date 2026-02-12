@@ -262,6 +262,10 @@ const TransactionsPage = () => {
 			toast.info("Esta movimentação já está estornada.");
 			return;
 		}
+		if (!resolvePostedTransactionId(transaction)) {
+			toast.error("Não foi possível identificar a transação para estorno.");
+			return;
+		}
 		setReversingTransaction(transaction);
 		setIsReverseDialogOpen(true);
 	};
@@ -361,6 +365,16 @@ const TransactionsPage = () => {
 
 	const isReversedTransaction = (transaction: TransactionResponse) => {
 		return transaction.transactionStatus === "REVERSED";
+	};
+
+	const resolvePostedTransactionId = (transaction: TransactionResponse): string | null => {
+		const asAny = transaction as unknown as Record<string, unknown>;
+		const camel = typeof asAny.transactionId === "string" ? asAny.transactionId.trim() : "";
+		if (camel) return camel;
+		const snake = typeof asAny.transaction_id === "string" ? asAny.transaction_id.trim() : "";
+		if (snake) return snake;
+		const direct = typeof transaction.id === "string" ? transaction.id.trim() : "";
+		return direct || null;
 	};
 
 	const isSimplePaidTransaction = (transaction: TransactionResponse) =>
@@ -538,8 +552,13 @@ const TransactionsPage = () => {
 	};
 
 	const handleConfirmReverse = async () => {
-		if (!reversingTransaction?.id) {
+		if (!reversingTransaction) {
 			toast.error("Não foi possível estornar esta movimentação.");
+			return;
+		}
+		const targetTransactionId = resolvePostedTransactionId(reversingTransaction);
+		if (!targetTransactionId) {
+			toast.error("Não foi possível identificar a transação para estorno.");
 			return;
 		}
 		if (isReversedTransaction(reversingTransaction)) {
@@ -549,7 +568,7 @@ const TransactionsPage = () => {
 
 		setIsReversing(true);
 		try {
-			await reverseTransaction(reversingTransaction.id);
+			await reverseTransaction(targetTransactionId);
 			toast.success("Movimentação estornada com sucesso.");
 			handleReverseDialogChange(false);
 			await loadTransactions();
@@ -733,7 +752,6 @@ const TransactionsPage = () => {
 				const transaction = row.original as MovementItem;
 				const isScheduled = isScheduledOccurrence(transaction);
 				const isReversed = isReversedTransaction(transaction);
-				const hidePaidBadge = activeFilters?.timeline === "realizadas";
 				
 				return (
 					<div className="flex items-center justify-center gap-2 text-center">
@@ -751,11 +769,11 @@ const TransactionsPage = () => {
 							<Badge className="text-[10px] bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
 								Estornada
 							</Badge>
-						) : !hidePaidBadge ? (
+						) : (
 							<Badge className="text-[10px] bg-blue-500/15 text-blue-600 hover:bg-blue-500/15">
 								Paga
 							</Badge>
-						) : null}
+						)}
 					</div>
 				);
 			},
