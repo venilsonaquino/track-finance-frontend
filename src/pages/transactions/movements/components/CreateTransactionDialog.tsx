@@ -51,6 +51,10 @@ type InstallmentItem = {
 };
 
 const MAX_AMOUNT = 9_999_999_999.99;
+const MIN_INSTALLMENTS = 1;
+const MAX_INSTALLMENTS = 24;
+const isInstallmentsCountValid = (count: number) =>
+	Number.isInteger(count) && count >= MIN_INSTALLMENTS && count <= MAX_INSTALLMENTS;
 
 const addInterval = (date: Date, installmentInterval: IntervalType, step: number) => {
 	const nextDate = new Date(date);
@@ -146,7 +150,7 @@ const buildInitialState = (date?: Date) => ({
 	transactionType: "expense" as TransactionType,
 	isRecurring: false,
 	isInstallment: false,
-	installmentNumber: "2",
+	installmentNumber: "1",
 	installmentInterval: "MONTHLY" as IntervalType,
 	affectBalance: true,
 });
@@ -178,7 +182,7 @@ export const CreateTransactionDialog = ({
 
 	const isValid = useMemo(() => {
 		const installmentsCount = Number(formData.installmentNumber);
-		const hasValidInstallments = !formData.isInstallment || installmentsCount >= 2;
+		const hasValidInstallments = !formData.isInstallment || isInstallmentsCountValid(installmentsCount);
 
 		return Boolean(
 			formData.description.trim() &&
@@ -242,9 +246,9 @@ export const CreateTransactionDialog = ({
 			isInstallment: checked,
 			isRecurring: checked ? false : prev.isRecurring,
 			installmentNumber: checked
-				? Number(prev.installmentNumber) >= 2
+				? isInstallmentsCountValid(Number(prev.installmentNumber))
 					? prev.installmentNumber
-					: "2"
+					: "1"
 				: prev.installmentNumber,
 			installmentInterval: checked ? "MONTHLY" : prev.installmentInterval,
 		}));
@@ -257,7 +261,7 @@ export const CreateTransactionDialog = ({
 			formData.isInstallment &&
 			!Number.isNaN(totalAmount) &&
 			totalAmount > 0 &&
-			installmentsCount >= 2;
+			isInstallmentsCountValid(installmentsCount);
 
 		if (!canShow) {
 			return {
@@ -321,8 +325,8 @@ export const CreateTransactionDialog = ({
 		}
 
 		const installmentsCount = Number(formData.installmentNumber);
-		if (formData.isInstallment && installmentsCount < 2) {
-			toast.error("Informe pelo menos 2 parcelas.");
+		if (formData.isInstallment && !isInstallmentsCountValid(installmentsCount)) {
+			toast.error(`Informe entre ${MIN_INSTALLMENTS} e ${MAX_INSTALLMENTS} parcelas.`);
 			return;
 		}
 
@@ -634,10 +638,10 @@ export const CreateTransactionDialog = ({
 														onValueChange={(value) => handleChange("installmentNumber", value)}
 													>
 														<SelectTrigger className="w-[88px] min-w-[88px] h-9 flex-shrink-0">
-															<SelectValue placeholder="2" />
+															<SelectValue placeholder="1" />
 														</SelectTrigger>
 														<SelectContent>
-															{Array.from({ length: 23 }, (_, index) => index + 2).map(count => (
+															{Array.from({ length: MAX_INSTALLMENTS }, (_, index) => index + MIN_INSTALLMENTS).map(count => (
 																<SelectItem key={count} value={String(count)}>
 																	{count}
 																</SelectItem>
