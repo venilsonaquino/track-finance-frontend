@@ -16,6 +16,7 @@ import {
 	Clock3,
 	Loader2,
 	MoreHorizontal,
+	Undo2,
 } from "lucide-react";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
 import { InstallmentContractService } from "@/api/services/installmentContractService";
@@ -31,7 +32,7 @@ type OccurrenceItem = {
 	id: string;
 	date: string;
 	amount: number;
-	status: "PAID" | "FUTURE" | "OVERDUE";
+	status: "PAID" | "FUTURE" | "OVERDUE" | "REVERSED";
 };
 
 type ContractViewData = {
@@ -171,8 +172,21 @@ const mapApiToView = (transaction: TransactionResponse, data: any): ContractView
 
 	const occurrences: OccurrenceItem[] = occurrencesRaw.map((item: any, index: number) => {
 		const statusRaw = String(item.status ?? "").toUpperCase();
+		const transactionStatusRaw = String(
+			item.transactionStatus ??
+			item.transaction_status ??
+			item.transaction?.transactionStatus ??
+			item.transaction?.transaction_status ??
+			""
+		).toUpperCase();
 		const status: OccurrenceItem["status"] =
-			statusRaw === "PAID" ? "PAID" : statusRaw === "OVERDUE" ? "OVERDUE" : "FUTURE";
+			statusRaw === "REVERSED" || transactionStatusRaw === "REVERSED"
+				? "REVERSED"
+				: statusRaw === "POSTED" || statusRaw === "PAID"
+					? "PAID"
+					: statusRaw === "OVERDUE"
+						? "OVERDUE"
+						: "FUTURE";
 		return {
 			id: String(item.id ?? index + 1),
 			date: item.dueDate ?? item.due_date ?? transaction.depositedDate,
@@ -259,14 +273,6 @@ export const ContractDetailsDrawer = ({
 		if (!data || data.installmentsCount <= 0) return 0;
 		return Math.round((data.paidCount / data.installmentsCount) * 100);
 	}, [data]);
-
-	const handleCancelFuture = () => {
-		if (!data) return;
-		const confirmed = window.confirm(
-			`Você deseja cancelar as ${data.futureCount} parcelas futuras?\nAs já pagas não serão afetadas.`
-		);
-		if (!confirmed) return;
-	};
 
 	const closingDayLabel = data?.closingDay ? `Fecha dia ${data.closingDay}` : "Fechamento indisponível";
 	const dueDayLabel = data?.dueDay ? `Vence dia ${data.dueDay}` : "Vencimento indisponível";
@@ -356,16 +362,31 @@ export const ContractDetailsDrawer = ({
 													className="flex items-center justify-between rounded-md border px-3 py-2"
 												>
 													<div className="flex items-center gap-2 text-sm">
-														{item.status === "PAID" ? (
+														{item.status === "REVERSED" ? (
+															<Undo2 className="h-4 w-4 text-amber-600" />
+														) : item.status === "PAID" ? (
 															<CheckCircle2 className="h-4 w-4 text-emerald-600" />
 														) : item.status === "OVERDUE" ? (
 															<AlertCircle className="h-4 w-4 text-red-500" />
 														) : (
 															<Clock3 className="h-4 w-4 text-muted-foreground" />
 														)}
-														<span className={item.status === "OVERDUE" ? "text-red-600" : ""}>
+														<span
+															className={
+																item.status === "OVERDUE"
+																	? "text-red-600"
+																	: item.status === "REVERSED"
+																		? "text-amber-700"
+																		: ""
+															}
+														>
 															{toDateLabel(item.date)} - {formatCurrency(item.amount)}
 														</span>
+														{item.status === "REVERSED" && (
+															<Badge className="text-[10px] bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
+																Estornada
+															</Badge>
+														)}
 													</div>
 													<DropdownMenu>
 														<DropdownMenuTrigger asChild>
