@@ -28,6 +28,7 @@ import { EditTransactionDialog } from "./components/EditTransactionDialog";
 import { DeleteTransactionDialog } from "./components/DeleteTransactionDialog";
 import { ReverseTransactionDialog } from "./components/ReverseTransactionDialog";
 import { ContractDetailsDrawer } from "./components/ContractDetailsDrawer";
+import { RecurringContractDetailsDrawer } from "./components/RecurringContractDetailsDrawer";
 import { toast } from "sonner";
 import { formatCurrency } from "@/utils/currency-utils";
 import { useCategories } from "../hooks/use-categories";
@@ -53,6 +54,8 @@ const TransactionsPage = () => {
 	const [isReversing, setIsReversing] = useState(false);
 	const [isContractDrawerOpen, setIsContractDrawerOpen] = useState(false);
 	const [contractTransaction, setContractTransaction] = useState<TransactionResponse | null>(null);
+	const [isRecurringContractDrawerOpen, setIsRecurringContractDrawerOpen] = useState(false);
+	const [recurringContractTransaction, setRecurringContractTransaction] = useState<TransactionResponse | null>(null);
 	const [activeFilters, setActiveFilters] = useState<{
 		startDate: string;
 		endDate: string;
@@ -346,6 +349,47 @@ const TransactionsPage = () => {
 	const isOccurrenceTransaction = (transaction: TransactionResponse) =>
 		isScheduledOccurrence(transaction);
 
+	const resolveContractKind = (transaction: TransactionResponse): "RECURRING" | "INSTALLMENT" | null => {
+		const asAny = transaction as unknown as Record<string, unknown>;
+		const rawTypeRaw =
+			transaction.contractType ??
+			transaction.contract_type ??
+			(typeof asAny.contractType === "string" ? asAny.contractType : null) ??
+			(typeof asAny.contract_type === "string" ? asAny.contract_type : null);
+		const rawType = typeof rawTypeRaw === "string" ? rawTypeRaw.toUpperCase() : null;
+
+		if (rawType === "RECURRING") return "RECURRING";
+		if (rawType === "INSTALLMENT") return "INSTALLMENT";
+
+		const hasInstallmentSignals = Boolean(
+			transaction.isInstallment ||
+			transaction.installmentContractId ||
+			transaction.installment_contract_id ||
+			transaction.installmentNumber ||
+			transaction.installmentInterval ||
+			transaction.installmentEndDate
+		);
+		const hasRecurringSignals = Boolean(
+			transaction.isRecurring ||
+			transaction.recurringContractId ||
+			transaction.recurring_contract_id ||
+			transaction.recurrenceType ||
+			transaction.recurringInterval ||
+			transaction.recurringEndDate
+		);
+
+		if (hasInstallmentSignals && !hasRecurringSignals) return "INSTALLMENT";
+		if (hasRecurringSignals && !hasInstallmentSignals) return "RECURRING";
+
+		const description = (transaction.description ?? "").toLowerCase();
+		const looksLikeInstallmentByDescription = /parcela\s*\d+\s*\/\s*\d+/.test(description);
+		if (looksLikeInstallmentByDescription) return "INSTALLMENT";
+
+		if (hasInstallmentSignals) return "INSTALLMENT";
+		if (hasRecurringSignals) return "RECURRING";
+		return "RECURRING";
+	};
+
 	const handleMarkAsPaid = (transaction: TransactionResponse) => {
 		toast.info(`Marcar como pago: ${transaction.description}`);
 	};
@@ -359,6 +403,16 @@ const TransactionsPage = () => {
 	};
 
 	const handleViewContract = (transaction: TransactionResponse) => {
+		const kind = resolveContractKind(transaction);
+		if (kind === "RECURRING") {
+			setContractTransaction(null);
+			setIsContractDrawerOpen(false);
+			setRecurringContractTransaction(transaction);
+			setIsRecurringContractDrawerOpen(true);
+			return;
+		}
+		setRecurringContractTransaction(null);
+		setIsRecurringContractDrawerOpen(false);
 		setContractTransaction(transaction);
 		setIsContractDrawerOpen(true);
 	};
@@ -367,6 +421,13 @@ const TransactionsPage = () => {
 		setIsContractDrawerOpen(open);
 		if (!open) {
 			setContractTransaction(null);
+		}
+	};
+
+	const handleRecurringContractDrawerChange = (open: boolean) => {
+		setIsRecurringContractDrawerOpen(open);
+		if (!open) {
+			setRecurringContractTransaction(null);
 		}
 	};
 
@@ -932,6 +993,11 @@ const TransactionsPage = () => {
 				open={isContractDrawerOpen}
 				onOpenChange={handleContractDrawerChange}
 				transaction={contractTransaction}
+			/>
+			<RecurringContractDetailsDrawer
+				open={isRecurringContractDrawerOpen}
+				onOpenChange={handleRecurringContractDrawerChange}
+				transaction={recurringContractTransaction}
 			/>
 		</>
 	);

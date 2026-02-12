@@ -6,4 +6,6 @@ export const RecurringContractService = {
     HttpClient.post("/contracts/recurring", contract),
   getRecurringContractById: (id: string) =>
     HttpClient.get(`/contracts/recurring/${id}`),
+  getRecurringContractDetailsById: (id: string) =>
+    HttpClient.get(`/contracts/recurring/${id}/details`),
 };
