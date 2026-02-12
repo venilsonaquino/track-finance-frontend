@@ -338,20 +338,50 @@ const TransactionsPage = () => {
 		return filtered;
 	}, [activeFilters, previousTransactions]);
 
-	type MovementItem = TransactionResponse & {
-		transactionId?: string | null;
-		transaction_id?: string | null;
+	type MovementItem = TransactionResponse;
+
+	const getActions = (transaction: TransactionResponse) => {
+		const asAny = transaction as unknown as Record<string, unknown>;
+		const raw = (asAny.actions ?? {}) as Record<string, unknown>;
+		return {
+			canMarkAsPaid: Boolean(raw.canMarkAsPaid),
+			canReverse: Boolean(raw.canReverse),
+			canEditDueDate: Boolean(raw.canEditDueDate),
+			canSkip: Boolean(raw.canSkip),
+			canViewContract: Boolean(raw.canViewContract),
+		};
+	};
+
+	const resolveSource = (transaction: TransactionResponse): "transaction" | "installment" | "recurring" | null => {
+		const asAny = transaction as unknown as Record<string, unknown>;
+		const raw = transaction.source ?? (typeof asAny.source === "string" ? asAny.source : null);
+		if (raw === "transaction" || raw === "installment" || raw === "recurring") return raw;
+		return null;
+	};
+
+	const resolveOccurrenceStatus = (transaction: TransactionResponse): "SCHEDULED" | "POSTED" | "CANCELLED" | "SKIPPED" | null => {
+		const asAny = transaction as unknown as Record<string, unknown>;
+		const raw = transaction.occurrenceStatus ?? (typeof asAny.occurrenceStatus === "string" ? asAny.occurrenceStatus : null);
+		if (raw === "SCHEDULED" || raw === "POSTED" || raw === "CANCELLED" || raw === "SKIPPED") return raw;
+		return null;
 	};
 
 	const getOccurrenceTransactionId = (transaction: TransactionResponse): string | null | undefined => {
 		const asAny = transaction as unknown as Record<string, unknown>;
 		return (
+			(typeof transaction.transactionId === "string" ? transaction.transactionId : transaction.transactionId === null ? null : undefined) ??
 			(typeof asAny.transactionId === "string" ? asAny.transactionId : asAny.transactionId === null ? null : undefined) ??
 			(typeof asAny.transaction_id === "string" ? asAny.transaction_id : asAny.transaction_id === null ? null : undefined)
 		);
 	};
 
 	const isScheduledOccurrence = (transaction: TransactionResponse) => {
+		const source = resolveSource(transaction);
+		const occurrenceStatus = resolveOccurrenceStatus(transaction);
+		if (source === "installment" || source === "recurring") {
+			return occurrenceStatus === "SCHEDULED" || getOccurrenceTransactionId(transaction) == null;
+		}
+
 		const occurrenceTransactionId = getOccurrenceTransactionId(transaction);
 		const hasContractRelation =
 			Boolean(transaction.contractId || transaction.contract_id) ||
@@ -378,12 +408,7 @@ const TransactionsPage = () => {
 	};
 
 	const isSimplePaidTransaction = (transaction: TransactionResponse) =>
-		!isScheduledOccurrence(transaction) &&
-		!transaction.isRecurring &&
-		!transaction.isInstallment;
-
-	const isOccurrenceTransaction = (transaction: TransactionResponse) =>
-		isScheduledOccurrence(transaction);
+		resolveSource(transaction) === "transaction";
 
 	const resolveContractKind = (transaction: TransactionResponse): "RECURRING" | "INSTALLMENT" | null => {
 		const asAny = transaction as unknown as Record<string, unknown>;
@@ -396,34 +421,10 @@ const TransactionsPage = () => {
 
 		if (rawType === "RECURRING") return "RECURRING";
 		if (rawType === "INSTALLMENT") return "INSTALLMENT";
-
-		const hasInstallmentSignals = Boolean(
-			transaction.isInstallment ||
-			transaction.installmentContractId ||
-			transaction.installment_contract_id ||
-			transaction.installmentNumber ||
-			transaction.installmentInterval ||
-			transaction.installmentEndDate
-		);
-		const hasRecurringSignals = Boolean(
-			transaction.isRecurring ||
-			transaction.recurringContractId ||
-			transaction.recurring_contract_id ||
-			transaction.recurrenceType ||
-			transaction.recurringInterval ||
-			transaction.recurringEndDate
-		);
-
-		if (hasInstallmentSignals && !hasRecurringSignals) return "INSTALLMENT";
-		if (hasRecurringSignals && !hasInstallmentSignals) return "RECURRING";
-
-		const description = (transaction.description ?? "").toLowerCase();
-		const looksLikeInstallmentByDescription = /parcela\s*\d+\s*\/\s*\d+/.test(description);
-		if (looksLikeInstallmentByDescription) return "INSTALLMENT";
-
-		if (hasInstallmentSignals) return "INSTALLMENT";
-		if (hasRecurringSignals) return "RECURRING";
-		return "RECURRING";
+		const source = resolveSource(transaction);
+		if (source === "installment") return "INSTALLMENT";
+		if (source === "recurring") return "RECURRING";
+		return null;
 	};
 
 	const handleMarkAsPaid = (transaction: TransactionResponse) => {
@@ -452,20 +453,18 @@ const TransactionsPage = () => {
 
 		const resolveInstallmentIndex = (): number | null => {
 			const raw =
+				(typeof transaction.installmentIndex === "number" ? transaction.installmentIndex : null) ??
 				(typeof asAny.installmentIndex === "number" ? asAny.installmentIndex : null) ??
 				(typeof asAny.installment_index === "number" ? asAny.installment_index : null) ??
 				(typeof transaction.installmentNumber === "number" ? transaction.installmentNumber : null);
 
 			if (raw && Number.isInteger(raw) && raw > 0) return raw;
-
-			const match = (transaction.description ?? "").match(/parcela\s*(\d+)\s*\/\s*\d+/i);
-			if (!match) return null;
-			const parsed = Number(match[1]);
-			return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+			return null;
 		};
 
 		const resolveDueDate = (): string | null => {
 			const raw =
+				(typeof transaction.dueDate === "string" ? transaction.dueDate : null) ??
 				(typeof asAny.dueDate === "string" ? asAny.dueDate : null) ??
 				(typeof asAny.due_date === "string" ? asAny.due_date : null) ??
 				transaction.depositedDate ??
@@ -491,7 +490,7 @@ const TransactionsPage = () => {
 						return;
 					}
 					await InstallmentContractService.payOccurrence(contractId, installmentIndex);
-				} else {
+				} else if (kind === "RECURRING") {
 					const contractId = resolveRecurringContractId();
 					const dueDate = resolveDueDate();
 					if (!contractId || !dueDate) {
@@ -499,6 +498,9 @@ const TransactionsPage = () => {
 						return;
 					}
 					await RecurringContractService.payOccurrence(contractId, dueDate);
+				} else {
+					toast.error("Movimentação sem tipo de contrato para marcar como pago.");
+					return;
 				}
 
 				toast.success("Ocorrência marcada como paga com sucesso.");
@@ -872,8 +874,14 @@ const TransactionsPage = () => {
 			size: 80,
 			cell: ({ row }) => {
 				const transaction = row.original;
+				const actions = getActions(transaction);
 				const canUseSimplePaidActions = isSimplePaidTransaction(transaction);
-				const canUseOccurrenceActions = isOccurrenceTransaction(transaction);
+				const canUseOccurrenceActions =
+					actions.canMarkAsPaid ||
+					actions.canEditDueDate ||
+					actions.canSkip;
+				const canUseViewContractAction = actions.canViewContract;
+				const canUseReverseAction = actions.canReverse;
 				const isReversed = isReversedTransaction(transaction);
 
 				return (
@@ -894,7 +902,7 @@ const TransactionsPage = () => {
 										Editar
 									</DropdownMenuItem>
 								)}
-								{canUseSimplePaidActions && (
+								{canUseReverseAction && (
 									<DropdownMenuItem
 										disabled={isReversed}
 										onClick={() => handleOpenReverse(transaction)}
@@ -905,23 +913,31 @@ const TransactionsPage = () => {
 								)}
 								{canUseOccurrenceActions && (
 									<>
-										<DropdownMenuItem disabled={isMarkingAsPaid} onClick={() => handleMarkAsPaid(transaction)}>
-											<CheckCircle2 className="mr-2 h-4 w-4" />
-											{isMarkingAsPaid ? "Marcando..." : "Marcar como pago"}
-										</DropdownMenuItem>
-										<DropdownMenuItem onClick={() => handleEditDueDate(transaction)}>
-											<CalendarClock className="mr-2 h-4 w-4" />
-											Editar vencimento
-										</DropdownMenuItem>
-										<DropdownMenuItem onClick={() => handleIgnoreThisMonth(transaction)}>
-											<Clock className="mr-2 h-4 w-4" />
-											Ignorar este mês
-										</DropdownMenuItem>
-										<DropdownMenuItem onClick={() => handleViewContract(transaction)}>
-											<Eye className="mr-2 h-4 w-4" />
-											Ver contrato
-										</DropdownMenuItem>
+										{actions.canMarkAsPaid && (
+											<DropdownMenuItem disabled={isMarkingAsPaid} onClick={() => handleMarkAsPaid(transaction)}>
+												<CheckCircle2 className="mr-2 h-4 w-4" />
+												{isMarkingAsPaid ? "Marcando..." : "Marcar como pago"}
+											</DropdownMenuItem>
+										)}
+										{actions.canEditDueDate && (
+											<DropdownMenuItem onClick={() => handleEditDueDate(transaction)}>
+												<CalendarClock className="mr-2 h-4 w-4" />
+												Editar vencimento
+											</DropdownMenuItem>
+										)}
+										{actions.canSkip && (
+											<DropdownMenuItem onClick={() => handleIgnoreThisMonth(transaction)}>
+												<Clock className="mr-2 h-4 w-4" />
+												Ignorar este mês
+											</DropdownMenuItem>
+										)}
 									</>
+								)}
+								{canUseViewContractAction && (
+									<DropdownMenuItem onClick={() => handleViewContract(transaction)}>
+										<Eye className="mr-2 h-4 w-4" />
+										Ver contrato
+									</DropdownMenuItem>
 								)}
 								{!canUseOccurrenceActions && (
 									<DropdownMenuItem className="text-red-600" onClick={() => handleOpenDelete(transaction)}>

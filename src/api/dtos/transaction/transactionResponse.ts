@@ -3,12 +3,26 @@ import { WalletResponse } from "../wallet/wallet-response";
 
 export interface TransactionResponse {
   id?: string;
+  transactionId?: string | null;
+  transaction_id?: string | null;
   transactionType?: "INCOME" | "EXPENSE" | "TRANSFER";
   transactionStatus?: "POSTED" | "REVERSED";
+  source?: "transaction" | "installment" | "recurring";
+  occurrenceStatus?: "SCHEDULED" | "POSTED" | "CANCELLED" | "SKIPPED";
+  occurrenceId?: string | null;
+  installmentIndex?: number | null;
+  dueDate?: string | null;
   contractId?: string | null;
   contract_id?: string | null;
   contractType?: "RECURRING" | "INSTALLMENT" | null;
   contract_type?: "RECURRING" | "INSTALLMENT" | null;
+  actions?: {
+    canMarkAsPaid?: boolean;
+    canReverse?: boolean;
+    canEditDueDate?: boolean;
+    canSkip?: boolean;
+    canViewContract?: boolean;
+  };
   transferType: string;
   depositedDate: string;
   description: string;
