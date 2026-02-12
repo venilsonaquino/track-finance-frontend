@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, MoreVertical, Tag, TrendingDown, TrendingUp, Undo2, Wallet } from "lucide-react";
+import { CalendarClock, CheckCircle2, Clock, Eye, MoreVertical, Tag, TrendingDown, TrendingUp, Undo2, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
@@ -27,6 +27,7 @@ import { CreateTransactionDialog } from "./components/CreateTransactionDialog";
 import { EditTransactionDialog } from "./components/EditTransactionDialog";
 import { DeleteTransactionDialog } from "./components/DeleteTransactionDialog";
 import { ReverseTransactionDialog } from "./components/ReverseTransactionDialog";
+import { ContractDetailsDrawer } from "./components/ContractDetailsDrawer";
 import { toast } from "sonner";
 import { formatCurrency } from "@/utils/currency-utils";
 import { useCategories } from "../hooks/use-categories";
@@ -50,6 +51,8 @@ const TransactionsPage = () => {
 	const [isReverseDialogOpen, setIsReverseDialogOpen] = useState(false);
 	const [reversingTransaction, setReversingTransaction] = useState<TransactionResponse | null>(null);
 	const [isReversing, setIsReversing] = useState(false);
+	const [isContractDrawerOpen, setIsContractDrawerOpen] = useState(false);
+	const [contractTransaction, setContractTransaction] = useState<TransactionResponse | null>(null);
 	const [activeFilters, setActiveFilters] = useState<{
 		startDate: string;
 		endDate: string;
@@ -339,6 +342,33 @@ const TransactionsPage = () => {
 		!isScheduledOccurrence(transaction) &&
 		!transaction.isRecurring &&
 		!transaction.isInstallment;
+
+	const isOccurrenceTransaction = (transaction: TransactionResponse) =>
+		isScheduledOccurrence(transaction);
+
+	const handleMarkAsPaid = (transaction: TransactionResponse) => {
+		toast.info(`Marcar como pago: ${transaction.description}`);
+	};
+
+	const handleEditDueDate = (transaction: TransactionResponse) => {
+		toast.info(`Editar vencimento: ${transaction.description}`);
+	};
+
+	const handleIgnoreThisMonth = (transaction: TransactionResponse) => {
+		toast.info(`Ignorar este mês: ${transaction.description}`);
+	};
+
+	const handleViewContract = (transaction: TransactionResponse) => {
+		setContractTransaction(transaction);
+		setIsContractDrawerOpen(true);
+	};
+
+	const handleContractDrawerChange = (open: boolean) => {
+		setIsContractDrawerOpen(open);
+		if (!open) {
+			setContractTransaction(null);
+		}
+	};
 
 	const handleConfirmReverse = async () => {
 		if (!reversingTransaction?.id) {
@@ -658,6 +688,7 @@ const TransactionsPage = () => {
 			cell: ({ row }) => {
 				const transaction = row.original;
 				const canUseSimplePaidActions = isSimplePaidTransaction(transaction);
+				const canUseOccurrenceActions = isOccurrenceTransaction(transaction);
 				const isReversed = isReversedTransaction(transaction);
 
 				return (
@@ -687,10 +718,32 @@ const TransactionsPage = () => {
 										Estornar
 									</DropdownMenuItem>
 								)}
-								<DropdownMenuItem className="text-red-600" onClick={() => handleOpenDelete(transaction)}>
-									<Trash2 className="text-red-600 mr-2 h-4 w-4" />
-									Excluir
-								</DropdownMenuItem>
+								{canUseOccurrenceActions && (
+									<>
+										<DropdownMenuItem onClick={() => handleMarkAsPaid(transaction)}>
+											<CheckCircle2 className="mr-2 h-4 w-4" />
+											Marcar como pago
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => handleEditDueDate(transaction)}>
+											<CalendarClock className="mr-2 h-4 w-4" />
+											Editar vencimento
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => handleIgnoreThisMonth(transaction)}>
+											<Clock className="mr-2 h-4 w-4" />
+											Ignorar este mês
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => handleViewContract(transaction)}>
+											<Eye className="mr-2 h-4 w-4" />
+											Ver contrato
+										</DropdownMenuItem>
+									</>
+								)}
+								{!canUseOccurrenceActions && (
+									<DropdownMenuItem className="text-red-600" onClick={() => handleOpenDelete(transaction)}>
+										<Trash2 className="text-red-600 mr-2 h-4 w-4" />
+										Excluir
+									</DropdownMenuItem>
+								)}
 							</DropdownMenuContent>
 						</DropdownMenu>
 					</div>
@@ -874,6 +927,11 @@ const TransactionsPage = () => {
 				transaction={reversingTransaction}
 				onConfirm={handleConfirmReverse}
 				loading={isReversing}
+			/>
+			<ContractDetailsDrawer
+				open={isContractDrawerOpen}
+				onOpenChange={handleContractDrawerChange}
+				transaction={contractTransaction}
 			/>
 		</>
 	);

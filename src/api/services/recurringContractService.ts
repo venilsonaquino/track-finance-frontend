@@ -4,4 +4,6 @@ import { RecurringContractRequest } from "@/api/dtos/contracts/recurringContract
 export const RecurringContractService = {
   createRecurringContract: (contract: RecurringContractRequest) =>
     HttpClient.post("/contracts/recurring", contract),
+  getRecurringContractById: (id: string) =>
+    HttpClient.get(`/contracts/recurring/${id}`),
 };

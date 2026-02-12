@@ -5,6 +5,10 @@ export interface TransactionResponse {
   id?: string;
   transactionType?: "INCOME" | "EXPENSE" | "TRANSFER";
   transactionStatus?: "POSTED" | "REVERSED";
+  contractId?: string | null;
+  contract_id?: string | null;
+  contractType?: "RECURRING" | "INSTALLMENT" | null;
+  contract_type?: "RECURRING" | "INSTALLMENT" | null;
   transferType: string;
   depositedDate: string;
   description: string;
@@ -13,10 +17,14 @@ export interface TransactionResponse {
   category: CategoryResponse | null;
   wallet: WalletResponse | null;
   isRecurring: boolean | null;
+  recurringContractId?: string | null;
+  recurring_contract_id?: string | null;
   recurrenceType: string | null;
   recurringInterval: string | null;
   recurringEndDate: string | null;
   isInstallment: boolean | null;
+  installmentContractId?: string | null;
+  installment_contract_id?: string | null;
   installmentNumber: number | null;
   installmentInterval: number | null;
   installmentEndDate: string | null;
