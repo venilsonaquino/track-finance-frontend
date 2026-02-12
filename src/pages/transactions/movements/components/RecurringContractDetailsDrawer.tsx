@@ -396,29 +396,31 @@ export const RecurringContractDetailsDrawer = ({
 					</div>
 				</ScrollArea>
 
-				<SheetFooter className="mt-auto border-t px-5 py-4 bg-background flex-col gap-2 sm:flex-col">
-					<Button
-						type="button"
-						variant="outline"
-						className="w-full"
-						onClick={() => toast.info("Ação de pausar recorrência ainda não implementada.")}
-					>
-						Pausar recorrência
-					</Button>
-					<Button
-						type="button"
-						variant="destructive"
-						className="w-full"
-						onClick={() => {
-							const confirmed = window.confirm(
-								"Deseja encerrar esta recorrência? As ocorrências já pagas não serão alteradas."
-							);
-							if (!confirmed) return;
-							toast.info("Ação de encerrar recorrência ainda não implementada.");
-						}}
-					>
-						Encerrar recorrência
-					</Button>
+				<SheetFooter className="mt-auto border-t px-5 py-4 bg-background">
+					<div className="w-full rounded-lg border p-3 space-y-2">
+						<Button
+							type="button"
+							variant="outline"
+							className="w-full"
+							onClick={() => toast.info("Ação de pausar recorrência ainda não implementada.")}
+						>
+							Pausar recorrência
+						</Button>
+						<Button
+							type="button"
+							variant="destructive"
+							className="w-full"
+							onClick={() => {
+								const confirmed = window.confirm(
+									"Deseja encerrar esta recorrência? As ocorrências já pagas não serão alteradas."
+								);
+								if (!confirmed) return;
+								toast.info("Ação de encerrar recorrência ainda não implementada.");
+							}}
+						>
+							Encerrar recorrência
+						</Button>
+					</div>
 				</SheetFooter>
 			</SheetContent>
 		</Sheet>

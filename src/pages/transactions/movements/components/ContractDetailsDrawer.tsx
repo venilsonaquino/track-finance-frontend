@@ -27,6 +27,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 
 type OccurrenceItem = {
 	id: string;
@@ -276,6 +277,47 @@ export const ContractDetailsDrawer = ({
 
 	const closingDayLabel = data?.closingDay ? `Fecha dia ${data.closingDay}` : "Fechamento indisponível";
 	const dueDayLabel = data?.dueDay ? `Vence dia ${data.dueDay}` : "Vencimento indisponível";
+	const futureCount = data?.futureCount ?? 0;
+
+	const handleCancelFutureInstallments = () => {
+		if (!futureCount) {
+			toast.info("Não há parcelas futuras para cancelar.");
+			return;
+		}
+		const confirmed = window.confirm(
+			`Você deseja cancelar as ${futureCount} parcelas futuras?\nAs já pagas não serão afetadas.`
+		);
+		if (!confirmed) return;
+		toast.info("Cancelamento de parcelas futuras ainda não implementado.");
+	};
+
+	const handleChangeCategoryForFuture = () => {
+		if (!futureCount) {
+			toast.info("Não há parcelas futuras para alterar.");
+			return;
+		}
+		toast.info("Alteração de categoria para parcelas futuras ainda não implementada.");
+	};
+
+	const handleChangeWalletForFuture = () => {
+		if (!futureCount) {
+			toast.info("Não há parcelas futuras para alterar.");
+			return;
+		}
+		const confirmed = window.confirm(
+			"Alterar carteira/cartão impacta as parcelas futuras. Deseja continuar?"
+		);
+		if (!confirmed) return;
+		toast.info("Alteração de carteira/cartão ainda não implementada.");
+	};
+
+	const handleEndContract = () => {
+		const confirmed = window.confirm(
+			"Tem certeza que deseja encerrar este contrato?\nAs parcelas já pagas não serão alteradas."
+		);
+		if (!confirmed) return;
+		toast.info("Encerramento de contrato ainda não implementado.");
+	};
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
@@ -411,6 +453,46 @@ export const ContractDetailsDrawer = ({
 									<p className="font-semibold">Resumo financeiro</p>
 									<p>Já pago: {formatCurrency(data.paidAmount)}</p>
 									<p>Restante: {formatCurrency(data.remainingAmount)}</p>
+								</div>
+
+								<Separator />
+
+								<div className="space-y-3">
+									<p className="text-sm font-semibold">Ações do contrato</p>
+									<div className="rounded-lg border p-3 space-y-2">
+										<Button
+											type="button"
+											variant="outline"
+											className="w-full"
+											onClick={handleCancelFutureInstallments}
+										>
+											Cancelar parcelas futuras
+										</Button>
+										<Button
+											type="button"
+											variant="outline"
+											className="w-full"
+											onClick={handleChangeCategoryForFuture}
+										>
+											Alterar categoria (aplica às futuras)
+										</Button>
+										<Button
+											type="button"
+											variant="outline"
+											className="w-full"
+											onClick={handleChangeWalletForFuture}
+										>
+											Alterar carteira/cartão
+										</Button>
+										<Button
+											type="button"
+											variant="destructive"
+											className="w-full"
+											onClick={handleEndContract}
+										>
+											Encerrar contrato
+										</Button>
+									</div>
 								</div>
 
 								{error && (
