@@ -5,6 +5,7 @@ export interface RecurringContractRequest {
   categoryId: string;
   description: string;
   amount: string;
+  transactionType: "INCOME" | "EXPENSE";
   installmentInterval: IntervalType;
   firstDueDate: string;
 }

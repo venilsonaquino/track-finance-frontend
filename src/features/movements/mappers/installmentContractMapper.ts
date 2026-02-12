@@ -9,6 +9,7 @@ export const mapToInstallmentContractPayload = (
   categoryId: input.categoryId,
   description: input.description.trim(),
   totalAmount: formatAmountString(input.amount),
+  transactionType: input.transactionType,
   installmentsCount: input.installmentsCount ?? 2,
   installmentAmount: (() => {
     const count = input.installmentsCount ?? 0;

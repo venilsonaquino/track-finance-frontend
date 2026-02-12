@@ -8,6 +8,7 @@ export type MovementInput = {
   depositedDate: string;
   walletId: string;
   categoryId: string;
+  transactionType: "INCOME" | "EXPENSE";
   affectBalance: boolean;
   installmentInterval: IntervalType;
   installmentsCount?: number | null;

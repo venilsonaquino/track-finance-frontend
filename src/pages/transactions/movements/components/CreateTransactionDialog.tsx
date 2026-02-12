@@ -345,6 +345,7 @@ export const CreateTransactionDialog = ({
 			walletId: formData.walletId,
 			categoryId: formData.categoryId,
 			amount: amountForMovement,
+			transactionType: formData.transactionType === "expense" ? "EXPENSE" : "INCOME",
 			affectBalance: formData.affectBalance,
 			installmentInterval: formData.installmentInterval,
 			installmentsCount: formData.isInstallment ? installmentsCount : null,

@@ -490,8 +490,8 @@ const TransactionsPage = () => {
 						</span>
 						{isScheduled ? (
 							<>
-								<Clock className="h-3 w-3 text-muted-foreground" />
 								<Badge variant="secondary" className="text-[10px] text-muted-foreground" title="Ainda não debitada">
+									<Clock className="mr-1 h-3 w-3 text-muted-foreground" />
 									Agendada
 								</Badge>
 							</>

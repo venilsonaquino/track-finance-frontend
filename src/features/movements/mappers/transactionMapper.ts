@@ -7,6 +7,6 @@ export const mapToTransactionPayload = (input: MovementInput): TransactionReques
   walletId: input.walletId,
   categoryId: input.categoryId,
   amount: input.amount,
-  transactionType: input.amount < 0 ? "EXPENSE" : "INCOME",
+  transactionType: input.transactionType ?? (input.amount < 0 ? "EXPENSE" : "INCOME"),
   affectBalance: input.affectBalance,
 });

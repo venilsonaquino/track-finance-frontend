@@ -5,6 +5,7 @@ export interface InstallmentContractRequest {
   categoryId: string;
   description: string;
   totalAmount: string;
+  transactionType: "INCOME" | "EXPENSE";
   installmentsCount: number;
   installmentAmount?: string;
   installmentInterval : IntervalType;
