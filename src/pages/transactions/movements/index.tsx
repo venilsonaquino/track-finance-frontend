@@ -33,6 +33,8 @@ import { toast } from "sonner";
 import { formatCurrency } from "@/utils/currency-utils";
 import { useCategories } from "../hooks/use-categories";
 import { useWallets } from "../hooks/use-wallets";
+import { InstallmentContractService } from "@/api/services/installmentContractService";
+import { RecurringContractService } from "@/api/services/recurringContractService";
 
 const TransactionsPage = () => {
 	const { getTransactions, deleteTransaction, reverseTransaction } = useTransactions();
@@ -56,6 +58,7 @@ const TransactionsPage = () => {
 	const [contractTransaction, setContractTransaction] = useState<TransactionResponse | null>(null);
 	const [isRecurringContractDrawerOpen, setIsRecurringContractDrawerOpen] = useState(false);
 	const [recurringContractTransaction, setRecurringContractTransaction] = useState<TransactionResponse | null>(null);
+	const [isMarkingAsPaid, setIsMarkingAsPaid] = useState(false);
 	const [activeFilters, setActiveFilters] = useState<{
 		startDate: string;
 		endDate: string;
@@ -331,10 +334,29 @@ const TransactionsPage = () => {
 		return filtered;
 	}, [activeFilters, previousTransactions]);
 
-	type MovementItem = TransactionResponse & { transactionId?: string | null };
+	type MovementItem = TransactionResponse & {
+		transactionId?: string | null;
+		transaction_id?: string | null;
+	};
+
+	const getOccurrenceTransactionId = (transaction: TransactionResponse): string | null | undefined => {
+		const asAny = transaction as unknown as Record<string, unknown>;
+		return (
+			(typeof asAny.transactionId === "string" ? asAny.transactionId : asAny.transactionId === null ? null : undefined) ??
+			(typeof asAny.transaction_id === "string" ? asAny.transaction_id : asAny.transaction_id === null ? null : undefined)
+		);
+	};
 
 	const isScheduledOccurrence = (transaction: TransactionResponse) => {
-		return "transactionId" in transaction && (transaction as MovementItem).transactionId == null;
+		const occurrenceTransactionId = getOccurrenceTransactionId(transaction);
+		const hasContractRelation =
+			Boolean(transaction.contractId || transaction.contract_id) ||
+			Boolean(transaction.installmentContractId || transaction.installment_contract_id) ||
+			Boolean(transaction.recurringContractId || transaction.recurring_contract_id) ||
+			Boolean(transaction.isInstallment || transaction.isRecurring);
+
+		// Occurrence is "scheduled" when it belongs to a contract and still has no generated transaction id.
+		return occurrenceTransactionId !== undefined ? occurrenceTransactionId === null && hasContractRelation : hasContractRelation;
 	};
 
 	const isReversedTransaction = (transaction: TransactionResponse) => {
@@ -391,7 +413,91 @@ const TransactionsPage = () => {
 	};
 
 	const handleMarkAsPaid = (transaction: TransactionResponse) => {
-		toast.info(`Marcar como pago: ${transaction.description}`);
+		const asAny = transaction as unknown as Record<string, unknown>;
+		const resolveInstallmentContractId = () =>
+			transaction.installmentContractId ??
+			transaction.installment_contract_id ??
+			transaction.contractId ??
+			transaction.contract_id ??
+			(typeof asAny.installmentContractId === "string" ? asAny.installmentContractId : null) ??
+			(typeof asAny.installment_contract_id === "string" ? asAny.installment_contract_id : null) ??
+			(typeof asAny.contractId === "string" ? asAny.contractId : null) ??
+			(typeof asAny.contract_id === "string" ? asAny.contract_id : null) ??
+			null;
+
+		const resolveRecurringContractId = () =>
+			transaction.recurringContractId ??
+			transaction.recurring_contract_id ??
+			transaction.contractId ??
+			transaction.contract_id ??
+			(typeof asAny.recurringContractId === "string" ? asAny.recurringContractId : null) ??
+			(typeof asAny.recurring_contract_id === "string" ? asAny.recurring_contract_id : null) ??
+			(typeof asAny.contractId === "string" ? asAny.contractId : null) ??
+			(typeof asAny.contract_id === "string" ? asAny.contract_id : null) ??
+			null;
+
+		const resolveInstallmentIndex = (): number | null => {
+			const raw =
+				(typeof asAny.installmentIndex === "number" ? asAny.installmentIndex : null) ??
+				(typeof asAny.installment_index === "number" ? asAny.installment_index : null) ??
+				(typeof transaction.installmentNumber === "number" ? transaction.installmentNumber : null);
+
+			if (raw && Number.isInteger(raw) && raw > 0) return raw;
+
+			const match = (transaction.description ?? "").match(/parcela\s*(\d+)\s*\/\s*\d+/i);
+			if (!match) return null;
+			const parsed = Number(match[1]);
+			return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+		};
+
+		const resolveDueDate = (): string | null => {
+			const raw =
+				(typeof asAny.dueDate === "string" ? asAny.dueDate : null) ??
+				(typeof asAny.due_date === "string" ? asAny.due_date : null) ??
+				transaction.depositedDate ??
+				transaction.transactionDate ??
+				null;
+			if (!raw) return null;
+			if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+			const parsed = new Date(raw);
+			if (Number.isNaN(parsed.getTime())) return null;
+			return parsed.toISOString().slice(0, 10);
+		};
+
+		const run = async () => {
+			if (isMarkingAsPaid) return;
+			setIsMarkingAsPaid(true);
+			try {
+				const kind = resolveContractKind(transaction);
+				if (kind === "INSTALLMENT") {
+					const contractId = resolveInstallmentContractId();
+					const installmentIndex = resolveInstallmentIndex();
+					if (!contractId || !installmentIndex) {
+						toast.error("Não foi possível identificar contrato/índice da parcela.");
+						return;
+					}
+					await InstallmentContractService.payOccurrence(contractId, installmentIndex);
+				} else {
+					const contractId = resolveRecurringContractId();
+					const dueDate = resolveDueDate();
+					if (!contractId || !dueDate) {
+						toast.error("Não foi possível identificar contrato/data da ocorrência.");
+						return;
+					}
+					await RecurringContractService.payOccurrence(contractId, dueDate);
+				}
+
+				toast.success("Ocorrência marcada como paga com sucesso.");
+				await loadTransactions();
+			} catch (error) {
+				console.error(error);
+				toast.error("Não foi possível marcar ocorrência como paga.");
+			} finally {
+				setIsMarkingAsPaid(false);
+			}
+		};
+
+		void run();
 	};
 
 	const handleEditDueDate = (transaction: TransactionResponse) => {
@@ -781,9 +887,9 @@ const TransactionsPage = () => {
 								)}
 								{canUseOccurrenceActions && (
 									<>
-										<DropdownMenuItem onClick={() => handleMarkAsPaid(transaction)}>
+										<DropdownMenuItem disabled={isMarkingAsPaid} onClick={() => handleMarkAsPaid(transaction)}>
 											<CheckCircle2 className="mr-2 h-4 w-4" />
-											Marcar como pago
+											{isMarkingAsPaid ? "Marcando..." : "Marcar como pago"}
 										</DropdownMenuItem>
 										<DropdownMenuItem onClick={() => handleEditDueDate(transaction)}>
 											<CalendarClock className="mr-2 h-4 w-4" />
