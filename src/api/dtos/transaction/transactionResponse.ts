@@ -4,6 +4,7 @@ import { WalletResponse } from "../wallet/wallet-response";
 export interface TransactionResponse {
   id?: string;
   transactionType?: "INCOME" | "EXPENSE" | "TRANSFER";
+  transactionStatus?: "POSTED" | "REVERSED";
   transferType: string;
   depositedDate: string;
   description: string;

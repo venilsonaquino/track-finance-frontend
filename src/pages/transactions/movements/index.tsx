@@ -311,6 +311,10 @@ const TransactionsPage = () => {
 		return "transactionId" in transaction && (transaction as MovementItem).transactionId == null;
 	};
 
+	const isReversedTransaction = (transaction: TransactionResponse) => {
+		return transaction.transactionStatus === "REVERSED";
+	};
+
 	const isSimplePaidTransaction = (transaction: TransactionResponse) =>
 		!isScheduledOccurrence(transaction) &&
 		!transaction.isRecurring &&
@@ -319,6 +323,10 @@ const TransactionsPage = () => {
 	const handleReverseTransaction = async (transaction: TransactionResponse) => {
 		if (!transaction.id) {
 			toast.error("Não foi possível estornar esta movimentação.");
+			return;
+		}
+		if (isReversedTransaction(transaction)) {
+			toast.info("Esta movimentação já está estornada.");
 			return;
 		}
 
@@ -502,6 +510,7 @@ const TransactionsPage = () => {
 				const description = row.getValue("description") as string;
 				const transaction = row.original as MovementItem;
 				const isScheduled = isScheduledOccurrence(transaction);
+				const isReversed = isReversedTransaction(transaction);
 				const hidePaidBadge = activeFilters?.timeline === "realizadas";
 				
 				return (
@@ -516,6 +525,10 @@ const TransactionsPage = () => {
 									Agendada
 								</Badge>
 							</>
+						) : isReversed ? (
+							<Badge className="text-[10px] bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
+								Estornada
+							</Badge>
 						) : !hidePaidBadge ? (
 							<Badge className="text-[10px] bg-blue-500/15 text-blue-600 hover:bg-blue-500/15">
 								Paga
@@ -620,6 +633,7 @@ const TransactionsPage = () => {
 			cell: ({ row }) => {
 				const transaction = row.original;
 				const canUseSimplePaidActions = isSimplePaidTransaction(transaction);
+				const isReversed = isReversedTransaction(transaction);
 
 				return (
 					<div className="text-right">
@@ -640,7 +654,10 @@ const TransactionsPage = () => {
 									</DropdownMenuItem>
 								)}
 								{canUseSimplePaidActions && (
-									<DropdownMenuItem onClick={() => void handleReverseTransaction(transaction)}>
+									<DropdownMenuItem
+										disabled={isReversed}
+										onClick={() => void handleReverseTransaction(transaction)}
+									>
 										<Undo2 className="mr-2 h-4 w-4" />
 										Estornar
 									</DropdownMenuItem>
