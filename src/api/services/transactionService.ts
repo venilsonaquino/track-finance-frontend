@@ -8,5 +8,6 @@ export const TransactionService = {
     HttpClient.get(`/transactions/movements/range?start_date=${startDate}&end_date=${endDate}&view=${view}`),
   getTransactionById: (id: string) => HttpClient.get(`/transactions/${id}`),
   updateTransaction: (id: string, transaction: TransactionRequest) => HttpClient.put(`/transactions/${id}`, transaction),
+  reverseTransaction: (id: string) => HttpClient.post(`/transactions/${id}/reverse`),
   deleteTransaction: (id: string) => HttpClient.delete(`/transactions/${id}`),
 };

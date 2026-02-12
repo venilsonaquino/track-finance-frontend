@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Clock, MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Clock, MoreVertical, Tag, TrendingDown, TrendingUp, Undo2, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
@@ -32,7 +32,7 @@ import { useCategories } from "../hooks/use-categories";
 import { useWallets } from "../hooks/use-wallets";
 
 const TransactionsPage = () => {
-	const { getTransactions, deleteTransaction } = useTransactions();
+	const { getTransactions, deleteTransaction, reverseTransaction } = useTransactions();
 	const { categories } = useCategories();
 	const { wallets } = useWallets();
 	type TransactionsRangeResponse = TransactionsRecordResponse & {
@@ -309,6 +309,27 @@ const TransactionsPage = () => {
 
 	const isScheduledOccurrence = (transaction: TransactionResponse) => {
 		return "transactionId" in transaction && (transaction as MovementItem).transactionId == null;
+	};
+
+	const isSimplePaidTransaction = (transaction: TransactionResponse) =>
+		!isScheduledOccurrence(transaction) &&
+		!transaction.isRecurring &&
+		!transaction.isInstallment;
+
+	const handleReverseTransaction = async (transaction: TransactionResponse) => {
+		if (!transaction.id) {
+			toast.error("Não foi possível estornar esta movimentação.");
+			return;
+		}
+
+		try {
+			await reverseTransaction(transaction.id);
+			toast.success("Movimentação estornada com sucesso.");
+			await loadTransactions();
+		} catch (error) {
+			console.error(error);
+			toast.error("Não foi possível estornar a movimentação.");
+		}
 	};
 
 	const buildTotals = (transactions: TransactionResponse[]) => {
@@ -598,6 +619,7 @@ const TransactionsPage = () => {
 			size: 80,
 			cell: ({ row }) => {
 				const transaction = row.original;
+				const canUseSimplePaidActions = isSimplePaidTransaction(transaction);
 
 				return (
 					<div className="text-right">
@@ -611,10 +633,18 @@ const TransactionsPage = () => {
 							<DropdownMenuContent align="end">
 								<DropdownMenuLabel>Ações</DropdownMenuLabel>
 								<DropdownMenuSeparator />
-								<DropdownMenuItem onClick={() => handleOpenEdit(transaction)}>
-									<Edit className="mr-2 h-4 w-4 " />
-									Editar
-								</DropdownMenuItem>
+								{canUseSimplePaidActions && (
+									<DropdownMenuItem onClick={() => handleOpenEdit(transaction)}>
+										<Edit className="mr-2 h-4 w-4 " />
+										Editar
+									</DropdownMenuItem>
+								)}
+								{canUseSimplePaidActions && (
+									<DropdownMenuItem onClick={() => void handleReverseTransaction(transaction)}>
+										<Undo2 className="mr-2 h-4 w-4" />
+										Estornar
+									</DropdownMenuItem>
+								)}
 								<DropdownMenuItem className="text-red-600" onClick={() => handleOpenDelete(transaction)}>
 									<Trash2 className="text-red-600 mr-2 h-4 w-4" />
 									Excluir

@@ -51,6 +51,22 @@ export const useTransactions = () => {
     }
   }, []);
 
+  const reverseTransaction = useCallback(async (id: string) => {
+    try {
+      setLoading(true);
+      const response = await TransactionService.reverseTransaction(id);
+      if (Array.isArray(response?.data)) {
+        setTransactions(response.data);
+      }
+      return response.data;
+    } catch (error) {
+      setError(error as string);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const deleteTransaction = useCallback(async (id: string) => {
     try {
       setLoading(true);
@@ -98,6 +114,7 @@ export const useTransactions = () => {
     createTransaction, 
     clearTransactions, 
     updateTransaction, 
+    reverseTransaction,
     deleteTransaction, 
     getTransactions,
     getTransactionById 
