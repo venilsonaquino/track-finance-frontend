@@ -14,10 +14,21 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Clock3, Loader2, RotateCw } from "lucide-react";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
 import { RecurringContractService } from "@/api/services/recurringContractService";
+import { ContractOccurrenceService } from "@/api/services/contractOccurrenceService";
 import { toast } from "sonner";
-import { formatCurrency } from "@/utils/currency-utils";
+import { formatCurrency, maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-type RecurringContractDetailsDrawerProps = {
+type ContractRecurringDetailsDrawerProps = {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	transaction: TransactionResponse | null;
@@ -26,6 +37,7 @@ type RecurringContractDetailsDrawerProps = {
 type Occurrence = {
 	id: string;
 	date: string;
+	amount: number;
 	amountLabel: string;
 	status: "PAID" | "FUTURE";
 };
@@ -97,6 +109,18 @@ const toDateLabel = (value?: string) => {
 	const parsed = new Date(value);
 	if (Number.isNaN(parsed.getTime())) return value;
 	return parsed.toLocaleDateString("pt-BR");
+};
+
+const toIsoDate = (value?: string | null) => {
+	if (!value) return null;
+	if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+	if (value.includes("T")) {
+		const candidate = value.slice(0, 10);
+		if (/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return candidate;
+	}
+	const parsed = new Date(value);
+	if (Number.isNaN(parsed.getTime())) return null;
+	return parsed.toISOString().slice(0, 10);
 };
 
 const parseAmount = (value: unknown): number => {
@@ -205,10 +229,12 @@ const mapApiToView = (data: RecurringContractDetailsResponse, fallback: Transact
 
 	const occurrences: Occurrence[] = (data?.occurrenceHistory?.items ?? []).map((item, index) => {
 		const status: Occurrence["status"] = item.status === "PAID" ? "PAID" : "FUTURE";
+		const amountValue = Math.abs(parseAmount(item.amount));
 		return {
 			id: item.id ?? `occ-${index + 1}`,
 			date: item.dueDate,
-			amountLabel: formatCurrency(Math.abs(parseAmount(item.amount))),
+			amount: amountValue,
+			amountLabel: formatCurrency(amountValue),
 			status,
 		};
 	});
@@ -239,19 +265,28 @@ const mapApiToView = (data: RecurringContractDetailsResponse, fallback: Transact
 	};
 };
 
-export const RecurringContractDetailsDrawer = ({
+export const ContractRecurringDetailsDrawer = ({
 	open,
 	onOpenChange,
 	transaction,
-}: RecurringContractDetailsDrawerProps) => {
+}: ContractRecurringDetailsDrawerProps) => {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [data, setData] = useState<RecurringContractViewModel | null>(null);
+	const [isEditAmountOpen, setIsEditAmountOpen] = useState(false);
+	const [selectedOccurrence, setSelectedOccurrence] = useState<Occurrence | null>(null);
+	const [amountInput, setAmountInput] = useState("");
+	const [scope, setScope] = useState<"single" | "future">("single");
+	const [savingAmount, setSavingAmount] = useState(false);
+
+	const contractId = useMemo(
+		() => (transaction ? resolveRecurringContractId(transaction) : null),
+		[transaction]
+	);
 
 	useEffect(() => {
 		if (!open || !transaction) return;
 
-		const contractId = resolveRecurringContractId(transaction);
 		if (!contractId) {
 			setData(buildFallbackData(transaction));
 			setError("Contrato fixo sem id válido. Exibindo dados fallback.");
@@ -280,11 +315,64 @@ export const RecurringContractDetailsDrawer = ({
 		return () => {
 			mounted = false;
 		};
-	}, [open, transaction]);
+	}, [open, transaction, contractId]);
+
+	useEffect(() => {
+		if (!open) {
+			setIsEditAmountOpen(false);
+			setSelectedOccurrence(null);
+			setAmountInput("");
+			setScope("single");
+		}
+	}, [open]);
 
 	const viewData = useMemo(() => data ?? buildFallbackData(transaction), [data, transaction]);
+	const parsedPreviewAmount = parseCurrencyInput(amountInput);
+	const previewAmount = Number.isNaN(parsedPreviewAmount) ? 0 : parsedPreviewAmount;
+
+	const openEditAmountModal = (occurrence: Occurrence) => {
+		setSelectedOccurrence(occurrence);
+		setAmountInput(maskCurrencyInput(String(Math.round(Math.abs(occurrence.amount) * 100))));
+		setScope("single");
+		setIsEditAmountOpen(true);
+	};
+
+	const handleSaveOccurrenceAmount = async () => {
+		if (!contractId || !selectedOccurrence) return;
+		const dueDate = toIsoDate(selectedOccurrence.date);
+		if (!dueDate) {
+			toast.error("Não foi possível identificar a data da ocorrência.");
+			return;
+		}
+
+		const parsedAmount = parseCurrencyInput(amountInput);
+		if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+			toast.error("Informe um valor válido.");
+			return;
+		}
+
+		setSavingAmount(true);
+		try {
+			await ContractOccurrenceService.updateOccurrence(contractId, dueDate, {
+				amount: parsedAmount.toFixed(2),
+				applyToFuture: scope === "future",
+			});
+
+			const response = await RecurringContractService.getRecurringContractDetailsById(contractId);
+			setData(mapApiToView(response.data as RecurringContractDetailsResponse, transaction as TransactionResponse));
+
+			toast.success("Valor atualizado com sucesso.");
+			setIsEditAmountOpen(false);
+		} catch (err) {
+			console.error(err);
+			toast.error("Não foi possível atualizar o valor da ocorrência.");
+		} finally {
+			setSavingAmount(false);
+		}
+	};
 
 	return (
+		<>
 		<Sheet open={open} onOpenChange={onOpenChange}>
 			<SheetContent side="right" className="w-[480px] sm:max-w-[560px] p-0 flex flex-col">
 				<SheetHeader className="px-5 py-4 border-b">
@@ -368,9 +456,20 @@ export const RecurringContractDetailsDrawer = ({
 											)}
 											<span>{toDateLabel(item.date)} - {item.amountLabel}</span>
 										</div>
-										<Badge variant={item.status === "PAID" ? "secondary" : "outline"}>
-											{item.status === "PAID" ? "Paga" : "Futura"}
-										</Badge>
+										<div className="flex items-center gap-2">
+											<Badge variant={item.status === "PAID" ? "secondary" : "outline"}>
+												{item.status === "PAID" ? "Paga" : "Futura"}
+											</Badge>
+											<Button
+												type="button"
+												variant="ghost"
+												size="sm"
+												className="h-7 px-2 text-xs"
+												onClick={() => openEditAmountModal(item)}
+											>
+												Ajustar valor
+											</Button>
+										</div>
 									</div>
 								))}
 							</div>
@@ -424,5 +523,69 @@ export const RecurringContractDetailsDrawer = ({
 				</SheetFooter>
 			</SheetContent>
 		</Sheet>
+		<Dialog open={isEditAmountOpen} onOpenChange={setIsEditAmountOpen}>
+			<DialogContent className="sm:max-w-md">
+				<DialogHeader>
+					<DialogTitle>Ajustar valor da parcela</DialogTitle>
+					<DialogDescription>
+						Defina o novo valor e como aplicar a mudança.
+					</DialogDescription>
+				</DialogHeader>
+				<div className="space-y-4">
+					<div className="space-y-2">
+						<Label htmlFor="occurrence-amount">Novo valor</Label>
+						<Input
+							id="occurrence-amount"
+							inputMode="numeric"
+							placeholder="0,00"
+							value={amountInput}
+							onChange={(e) => setAmountInput(maskCurrencyInput(e.target.value))}
+						/>
+					</div>
+					<div className="space-y-2">
+						<Label>Como aplicar a mudança?</Label>
+						<div className="space-y-2">
+							<label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer">
+								<input
+									type="radio"
+									name="apply-scope"
+									value="single"
+									checked={scope === "single"}
+									onChange={() => setScope("single")}
+								/>
+								<span>Apenas esta parcela</span>
+							</label>
+							<label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer">
+								<input
+									type="radio"
+									name="apply-scope"
+									value="future"
+									checked={scope === "future"}
+									onChange={() => setScope("future")}
+								/>
+								<span>Esta e todas as futuras</span>
+							</label>
+						</div>
+					</div>
+					<p className="text-xs text-muted-foreground">
+						A alteração não afeta parcelas já pagas.
+					</p>
+					<div className="rounded-md border bg-muted/20 p-3 text-sm space-y-1">
+						<p>Valor atual: {selectedOccurrence ? formatCurrency(selectedOccurrence.amount) : "-"}</p>
+						<p>Novo valor: {formatCurrency(previewAmount)}</p>
+					</div>
+				</div>
+				<DialogFooter>
+					<Button type="button" variant="outline" onClick={() => setIsEditAmountOpen(false)}>
+						Cancelar
+					</Button>
+					<Button type="button" onClick={handleSaveOccurrenceAmount} disabled={savingAmount}>
+						{savingAmount ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+						Salvar
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+		</>
 	);
 };

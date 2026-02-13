@@ -58,7 +58,7 @@ type ContractViewData = {
 	occurrences: OccurrenceItem[];
 };
 
-type ContractDetailsDrawerProps = {
+type ContractInstallmentDetailsDrawerProps = {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	transaction: TransactionResponse | null;
@@ -227,11 +227,11 @@ const mapApiToView = (transaction: TransactionResponse, data: any): ContractView
 	};
 };
 
-export const ContractDetailsDrawer = ({
+export const ContractInstallmentDetailsDrawer = ({
 	open,
 	onOpenChange,
 	transaction,
-}: ContractDetailsDrawerProps) => {
+}: ContractInstallmentDetailsDrawerProps) => {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [data, setData] = useState<ContractViewData | null>(null);

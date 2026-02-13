@@ -27,8 +27,8 @@ import { CreateTransactionDialog } from "./components/CreateTransactionDialog";
 import { EditTransactionDialog } from "./components/EditTransactionDialog";
 import { DeleteTransactionDialog } from "./components/DeleteTransactionDialog";
 import { ReverseTransactionDialog } from "./components/ReverseTransactionDialog";
-import { ContractDetailsDrawer } from "./components/ContractDetailsDrawer";
-import { RecurringContractDetailsDrawer } from "./components/RecurringContractDetailsDrawer";
+import { ContractInstallmentDetailsDrawer } from "./components/ContractInstalltmentDetailsDrawer";
+import { ContractRecurringDetailsDrawer } from "./components/ContractRecurringDetailsDrawer";
 import { toast } from "sonner";
 import { formatCurrency } from "@/utils/currency-utils";
 import { useCategories } from "../hooks/use-categories";
@@ -54,9 +54,9 @@ const TransactionsPage = () => {
 	const [isReverseDialogOpen, setIsReverseDialogOpen] = useState(false);
 	const [reversingTransaction, setReversingTransaction] = useState<TransactionResponse | null>(null);
 	const [isReversing, setIsReversing] = useState(false);
-	const [isContractDrawerOpen, setIsContractDrawerOpen] = useState(false);
+	const [isContractInstallmentDrawerOpen, setIsContractInstallmentDrawerOpen] = useState(false);
 	const [contractTransaction, setContractTransaction] = useState<TransactionResponse | null>(null);
-	const [isRecurringContractDrawerOpen, setIsRecurringContractDrawerOpen] = useState(false);
+	const [isContractRecurringDrawerOpen, setIsContractRecurringDrawerOpen] = useState(false);
 	const [recurringContractTransaction, setRecurringContractTransaction] = useState<TransactionResponse | null>(null);
 	const [isMarkingAsPaid, setIsMarkingAsPaid] = useState(false);
 	const [activeFilters, setActiveFilters] = useState<{
@@ -528,26 +528,26 @@ const TransactionsPage = () => {
 		const kind = resolveContractKind(transaction);
 		if (kind === "RECURRING") {
 			setContractTransaction(null);
-			setIsContractDrawerOpen(false);
+			setIsContractInstallmentDrawerOpen(false);
 			setRecurringContractTransaction(transaction);
-			setIsRecurringContractDrawerOpen(true);
+			setIsContractRecurringDrawerOpen(true);
 			return;
 		}
 		setRecurringContractTransaction(null);
-		setIsRecurringContractDrawerOpen(false);
+		setIsContractRecurringDrawerOpen(false);
 		setContractTransaction(transaction);
-		setIsContractDrawerOpen(true);
+		setIsContractInstallmentDrawerOpen(true);
 	};
 
-	const handleContractDrawerChange = (open: boolean) => {
-		setIsContractDrawerOpen(open);
+	const handleContractInstallmentDrawerChange = (open: boolean) => {
+		setIsContractInstallmentDrawerOpen(open);
 		if (!open) {
-			setContractTransaction(null);
+			setContractTransaction(null)	;
 		}
 	};
 
-	const handleRecurringContractDrawerChange = (open: boolean) => {
-		setIsRecurringContractDrawerOpen(open);
+	const handleContractRecurringDrawerChange = (open: boolean) => {
+		setIsContractRecurringDrawerOpen(open);
 		if (!open) {
 			setRecurringContractTransaction(null);
 		}
@@ -1115,14 +1115,14 @@ const TransactionsPage = () => {
 				onConfirm={handleConfirmReverse}
 				loading={isReversing}
 			/>
-			<ContractDetailsDrawer
-				open={isContractDrawerOpen}
-				onOpenChange={handleContractDrawerChange}
+			<ContractInstallmentDetailsDrawer
+				open={isContractInstallmentDrawerOpen}
+				onOpenChange={handleContractInstallmentDrawerChange}
 				transaction={contractTransaction}
 			/>
-			<RecurringContractDetailsDrawer
-				open={isRecurringContractDrawerOpen}
-				onOpenChange={handleRecurringContractDrawerChange}
+			<ContractRecurringDetailsDrawer
+				open={isContractRecurringDrawerOpen}
+				onOpenChange={handleContractRecurringDrawerChange}
 				transaction={recurringContractTransaction}
 			/>
 		</>
