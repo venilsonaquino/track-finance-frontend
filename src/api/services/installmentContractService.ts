@@ -8,4 +8,6 @@ export const InstallmentContractService = {
     HttpClient.get(`/contracts/installments/${contractId}/details`),
   payOccurrence: (contractId: string, installmentIndex: number) =>
     HttpClient.patch(`/contracts/installments/${contractId}/occurrences/${installmentIndex}/pay`),
+  updateOccurrenceAmount: (contractId: string, installmentIndex: number, amount: string) =>
+    HttpClient.patch(`/contracts/installments/${contractId}/occurrences/${installmentIndex}/amount`, { amount }),
 };

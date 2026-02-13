@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
 import { InstallmentContractService } from "@/api/services/installmentContractService";
-import { formatCurrency } from "@/utils/currency-utils";
+import { formatCurrency, maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -28,9 +28,20 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type OccurrenceItem = {
 	id: string;
+	installmentIndex: number;
 	date: string;
 	amount: number;
 	status: "PAID" | "FUTURE" | "OVERDUE" | "REVERSED";
@@ -111,6 +122,7 @@ const buildMockData = (transaction: TransactionResponse): ContractViewData => {
 		const status: OccurrenceItem["status"] = index < paidCount ? "PAID" : "FUTURE";
 		return {
 			id: String(index + 1),
+			installmentIndex: index + 1,
 			date: date.toISOString(),
 			amount,
 			status,
@@ -190,6 +202,10 @@ const mapApiToView = (transaction: TransactionResponse, data: any): ContractView
 						: "FUTURE";
 		return {
 			id: String(item.id ?? index + 1),
+			installmentIndex:
+				(typeof item.installmentIndex === "number" ? item.installmentIndex : null) ??
+				(typeof item.installment_index === "number" ? item.installment_index : null) ??
+				index + 1,
 			date: item.dueDate ?? item.due_date ?? transaction.depositedDate,
 			amount: Math.abs(parseAmount(item.amount ?? parsedInstallmentAmount)),
 			status,
@@ -235,6 +251,10 @@ export const ContractInstallmentDetailsDrawer = ({
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [data, setData] = useState<ContractViewData | null>(null);
+	const [isEditAmountOpen, setIsEditAmountOpen] = useState(false);
+	const [selectedOccurrence, setSelectedOccurrence] = useState<OccurrenceItem | null>(null);
+	const [amountInput, setAmountInput] = useState("");
+	const [savingAmount, setSavingAmount] = useState(false);
 
 	useEffect(() => {
 		if (!open || !transaction) return;
@@ -319,7 +339,47 @@ export const ContractInstallmentDetailsDrawer = ({
 		toast.info("Encerramento de contrato ainda não implementado.");
 	};
 
+	const openEditAmountModal = (occurrence: OccurrenceItem) => {
+		setSelectedOccurrence(occurrence);
+		setAmountInput(maskCurrencyInput(String(Math.round(Math.abs(occurrence.amount) * 100))));
+		setIsEditAmountOpen(true);
+	};
+
+	const handleSaveOccurrenceAmount = async () => {
+		if (!transaction || !selectedOccurrence) return;
+		const contractId = resolveContractId(transaction);
+		if (!contractId) {
+			toast.error("Não foi possível identificar o contrato.");
+			return;
+		}
+
+		const parsedAmount = parseCurrencyInput(amountInput);
+		if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+			toast.error("Informe um valor válido.");
+			return;
+		}
+
+		setSavingAmount(true);
+		try {
+			await InstallmentContractService.updateOccurrenceAmount(
+				contractId,
+				selectedOccurrence.installmentIndex,
+				parsedAmount.toFixed(2)
+			);
+			const response = await InstallmentContractService.getInstallmentContractById(contractId);
+			setData(mapApiToView(transaction, response.data));
+			toast.success("Valor da parcela atualizado com sucesso.");
+			setIsEditAmountOpen(false);
+		} catch (err) {
+			console.error(err);
+			toast.error("Não foi possível atualizar o valor da parcela.");
+		} finally {
+			setSavingAmount(false);
+		}
+	};
+
 	return (
+		<>
 		<Sheet open={open} onOpenChange={onOpenChange}>
 			<SheetContent side="right" className="w-[480px] sm:max-w-[560px] p-0">
 				<SheetHeader className="px-5 py-4 border-b">
@@ -438,7 +498,9 @@ export const ContractInstallmentDetailsDrawer = ({
 														</DropdownMenuTrigger>
 														<DropdownMenuContent align="end">
 															<DropdownMenuItem>Editar vencimento</DropdownMenuItem>
-															<DropdownMenuItem>Ajustar valor desta parcela</DropdownMenuItem>
+															<DropdownMenuItem onClick={() => openEditAmountModal(item)}>
+																Ajustar valor desta parcela
+															</DropdownMenuItem>
 															<DropdownMenuItem>Ignorar parcela</DropdownMenuItem>
 														</DropdownMenuContent>
 													</DropdownMenu>
@@ -504,5 +566,33 @@ export const ContractInstallmentDetailsDrawer = ({
 				)}
 			</SheetContent>
 		</Sheet>
+		<Dialog open={isEditAmountOpen} onOpenChange={setIsEditAmountOpen}>
+			<DialogContent className="sm:max-w-md">
+				<DialogHeader>
+					<DialogTitle>Ajustar valor da parcela</DialogTitle>
+					<DialogDescription>Informe o novo valor para esta parcela.</DialogDescription>
+				</DialogHeader>
+				<div className="space-y-2">
+					<Label htmlFor="installment-amount">Novo valor</Label>
+					<Input
+						id="installment-amount"
+						inputMode="numeric"
+						placeholder="0,00"
+						value={amountInput}
+						onChange={(e) => setAmountInput(maskCurrencyInput(e.target.value))}
+					/>
+				</div>
+				<DialogFooter>
+					<Button type="button" variant="outline" onClick={() => setIsEditAmountOpen(false)}>
+						Cancelar
+					</Button>
+					<Button type="button" onClick={handleSaveOccurrenceAmount} disabled={savingAmount}>
+						{savingAmount ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+						Salvar
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+		</>
 	);
 };

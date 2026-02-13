@@ -29,12 +29,22 @@ import { ReverseTransactionDialog } from "./components/ReverseTransactionDialog"
 import { ContractInstallmentDetailsDrawer } from "./components/ContractInstalltmentDetailsDrawer";
 import { ContractRecurringDetailsDrawer } from "./components/ContractRecurringDetailsDrawer";
 import { toast } from "sonner";
-import { formatCurrency } from "@/utils/currency-utils";
+import { formatCurrency, maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 import { useCategories } from "../hooks/use-categories";
 import { useWallets } from "../hooks/use-wallets";
 import { InstallmentContractService } from "@/api/services/installmentContractService";
 import { RecurringContractService } from "@/api/services/recurringContractService";
 import { buildMovementMenuActions, MovementRowActions } from "./actions-config";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const TransactionsPage = () => {
 	const { getTransactions, deleteTransaction, reverseTransaction } = useTransactions();
@@ -59,6 +69,11 @@ const TransactionsPage = () => {
 	const [isContractRecurringDrawerOpen, setIsContractRecurringDrawerOpen] = useState(false);
 	const [recurringContractTransaction, setRecurringContractTransaction] = useState<TransactionResponse | null>(null);
 	const [isMarkingAsPaid, setIsMarkingAsPaid] = useState(false);
+	const [isAdjustAmountDialogOpen, setIsAdjustAmountDialogOpen] = useState(false);
+	const [adjustingTransaction, setAdjustingTransaction] = useState<TransactionResponse | null>(null);
+	const [adjustAmountInput, setAdjustAmountInput] = useState("");
+	const [adjustScope, setAdjustScope] = useState<"single" | "future">("single");
+	const [isAdjustingAmount, setIsAdjustingAmount] = useState(false);
 	const [activeFilters, setActiveFilters] = useState<{
 		startDate: string;
 		endDate: string;
@@ -526,6 +541,126 @@ const TransactionsPage = () => {
 		toast.info(`Ignorar este mês: ${transaction.description}`);
 	};
 
+	const toIsoDate = (value?: string | null) => {
+		if (!value) return null;
+		if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+		if (value.includes("T")) {
+			const candidate = value.slice(0, 10);
+			if (/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return candidate;
+		}
+		const parsed = new Date(value);
+		if (Number.isNaN(parsed.getTime())) return null;
+		return parsed.toISOString().slice(0, 10);
+	};
+
+	const resolveContractIdForAdjust = (transaction: TransactionResponse) => {
+		const asAny = transaction as unknown as Record<string, unknown>;
+		return (
+			transaction.contractId ??
+			transaction.contract_id ??
+			transaction.installmentContractId ??
+			transaction.installment_contract_id ??
+			transaction.recurringContractId ??
+			transaction.recurring_contract_id ??
+			(typeof asAny.contractId === "string" ? asAny.contractId : null) ??
+			(typeof asAny.contract_id === "string" ? asAny.contract_id : null) ??
+			(typeof asAny.installmentContractId === "string" ? asAny.installmentContractId : null) ??
+			(typeof asAny.recurringContractId === "string" ? asAny.recurringContractId : null) ??
+			null
+		);
+	};
+
+	const resolveInstallmentIndexForAdjust = (transaction: TransactionResponse): number | null => {
+		const asAny = transaction as unknown as Record<string, unknown>;
+		const raw =
+			(typeof transaction.installmentIndex === "number" ? transaction.installmentIndex : null) ??
+			(typeof asAny.installmentIndex === "number" ? asAny.installmentIndex : null) ??
+			(typeof asAny.installment_index === "number" ? asAny.installment_index : null) ??
+			(typeof transaction.installmentNumber === "number" ? transaction.installmentNumber : null);
+		return raw && Number.isInteger(raw) && raw > 0 ? raw : null;
+	};
+
+	const resolveDueDateForAdjust = (transaction: TransactionResponse): string | null => {
+		const asAny = transaction as unknown as Record<string, unknown>;
+		const raw =
+			(typeof transaction.dueDate === "string" ? transaction.dueDate : null) ??
+			(typeof asAny.dueDate === "string" ? asAny.dueDate : null) ??
+			(typeof asAny.due_date === "string" ? asAny.due_date : null) ??
+			transaction.depositedDate ??
+			transaction.transactionDate ??
+			null;
+		return toIsoDate(raw);
+	};
+
+	const handleOpenAdjustAmount = (transaction: TransactionResponse) => {
+		const amount = Math.abs(Number(transaction.amount) || 0);
+		setAdjustingTransaction(transaction);
+		setAdjustAmountInput(maskCurrencyInput(String(Math.round(amount * 100))));
+		setAdjustScope("single");
+		setIsAdjustAmountDialogOpen(true);
+	};
+
+	const handleAdjustAmountDialogChange = (open: boolean) => {
+		setIsAdjustAmountDialogOpen(open);
+		if (!open) {
+			setAdjustingTransaction(null);
+			setAdjustAmountInput("");
+			setAdjustScope("single");
+		}
+	};
+
+	const handleConfirmAdjustAmount = async () => {
+		if (!adjustingTransaction) return;
+
+		const contractId = resolveContractIdForAdjust(adjustingTransaction);
+		if (!contractId) {
+			toast.error("Não foi possível identificar o contrato.");
+			return;
+		}
+
+		const amount = parseCurrencyInput(adjustAmountInput);
+		if (Number.isNaN(amount) || amount <= 0) {
+			toast.error("Informe um valor válido.");
+			return;
+		}
+
+		const kind = resolveContractKind(adjustingTransaction);
+		setIsAdjustingAmount(true);
+		try {
+			if (kind === "INSTALLMENT") {
+				const installmentIndex = resolveInstallmentIndexForAdjust(adjustingTransaction);
+				if (!installmentIndex) {
+					toast.error("Não foi possível identificar o índice da parcela.");
+					return;
+				}
+				await InstallmentContractService.updateOccurrenceAmount(contractId, installmentIndex, amount.toFixed(2));
+			} else if (kind === "RECURRING") {
+				const dueDate = resolveDueDateForAdjust(adjustingTransaction);
+				if (!dueDate) {
+					toast.error("Não foi possível identificar a data da ocorrência.");
+					return;
+				}
+				if (adjustScope === "future") {
+					await RecurringContractService.updateOccurrenceAmountFuture(contractId, dueDate, amount.toFixed(2));
+				} else {
+					await RecurringContractService.updateOccurrenceAmount(contractId, dueDate, amount.toFixed(2));
+				}
+			} else {
+				toast.error("Ajuste de valor disponível apenas para ocorrências de contrato.");
+				return;
+			}
+
+			toast.success("Valor atualizado com sucesso.");
+			handleAdjustAmountDialogChange(false);
+			await loadTransactions();
+		} catch (error) {
+			console.error(error);
+			toast.error("Não foi possível ajustar o valor.");
+		} finally {
+			setIsAdjustingAmount(false);
+		}
+	};
+
 	const handleViewContract = (transaction: TransactionResponse) => {
 		const kind = resolveContractKind(transaction);
 		if (kind === "RECURRING") {
@@ -623,6 +758,7 @@ const TransactionsPage = () => {
 	const responsePeriodLabel = getPeriodLabelFromResponse(transactionsData?.period);
 	const periodLabel = responsePeriodLabel ?? getPeriodLabel(currentDate);
 	const previousMonthLabel = getMonthLabel(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+	const adjustingContractKind = adjustingTransaction ? resolveContractKind(adjustingTransaction) : null;
 
 	const getDeltaBadge = (current: number, previous: number, kind: "income" | "expense" | "balance") => {
 		if (!Number.isFinite(previous)) {
@@ -885,7 +1021,7 @@ const TransactionsPage = () => {
 						onReverse: handleOpenReverse,
 						onMarkAsPaid: handleMarkAsPaid,
 						onEditDueDate: handleEditDueDate,
-						onAdjustAmount: handleViewContract,
+						onAdjustAmount: handleOpenAdjustAmount,
 						onSkip: handleIgnoreThisMonth,
 						onViewContract: handleViewContract,
 						onDelete: handleOpenDelete,
@@ -1112,6 +1248,63 @@ const TransactionsPage = () => {
 				onOpenChange={handleContractRecurringDrawerChange}
 				transaction={recurringContractTransaction}
 			/>
+			<Dialog open={isAdjustAmountDialogOpen} onOpenChange={handleAdjustAmountDialogChange}>
+				<DialogContent className="sm:max-w-md">
+					<DialogHeader>
+						<DialogTitle>Ajustar valor</DialogTitle>
+						<DialogDescription>
+							Atualize o valor da ocorrência selecionada.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-4">
+						<div className="space-y-2">
+							<Label htmlFor="adjust-amount-input">Novo valor</Label>
+							<Input
+								id="adjust-amount-input"
+								inputMode="numeric"
+								placeholder="0,00"
+								value={adjustAmountInput}
+								onChange={(e) => setAdjustAmountInput(maskCurrencyInput(e.target.value))}
+							/>
+						</div>
+						{adjustingContractKind === "RECURRING" && (
+							<div className="space-y-2">
+								<Label>Como aplicar</Label>
+								<div className="space-y-2">
+									<label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer">
+										<input
+											type="radio"
+											name="adjust-scope"
+											value="single"
+											checked={adjustScope === "single"}
+											onChange={() => setAdjustScope("single")}
+										/>
+										<span>Apenas esta ocorrência</span>
+									</label>
+									<label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer">
+										<input
+											type="radio"
+											name="adjust-scope"
+											value="future"
+											checked={adjustScope === "future"}
+											onChange={() => setAdjustScope("future")}
+										/>
+										<span>Esta e futuras</span>
+									</label>
+								</div>
+							</div>
+						)}
+					</div>
+					<DialogFooter>
+						<Button type="button" variant="outline" onClick={() => handleAdjustAmountDialogChange(false)}>
+							Cancelar
+						</Button>
+						<Button type="button" onClick={handleConfirmAdjustAmount} disabled={isAdjustingAmount}>
+							{isAdjustingAmount ? "Salvando..." : "Salvar"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</>
 	);
 };

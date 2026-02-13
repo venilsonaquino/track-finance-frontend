@@ -14,7 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Clock3, Loader2, RotateCw } from "lucide-react";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
 import { RecurringContractService } from "@/api/services/recurringContractService";
-import { ContractOccurrenceService } from "@/api/services/contractOccurrenceService";
 import { toast } from "sonner";
 import { formatCurrency, maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 import {
@@ -353,10 +352,19 @@ export const ContractRecurringDetailsDrawer = ({
 
 		setSavingAmount(true);
 		try {
-			await ContractOccurrenceService.updateOccurrence(contractId, dueDate, {
-				amount: parsedAmount.toFixed(2),
-				applyToFuture: scope === "future",
-			});
+			if (scope === "future") {
+				await RecurringContractService.updateOccurrenceAmountFuture(
+					contractId,
+					dueDate,
+					parsedAmount.toFixed(2)
+				);
+			} else {
+				await RecurringContractService.updateOccurrenceAmount(
+					contractId,
+					dueDate,
+					parsedAmount.toFixed(2)
+				);
+			}
 
 			const response = await RecurringContractService.getRecurringContractDetailsById(contractId);
 			setData(mapApiToView(response.data as RecurringContractDetailsResponse, transaction as TransactionResponse));
