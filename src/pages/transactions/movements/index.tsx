@@ -5,11 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CalendarClock, CheckCircle2, Clock, Eye, MoreVertical, Tag, TrendingDown, TrendingUp, Undo2, Wallet } from "lucide-react";
+import { Clock, MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
-import { Edit, Trash2 } from "lucide-react";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -35,6 +34,7 @@ import { useCategories } from "../hooks/use-categories";
 import { useWallets } from "../hooks/use-wallets";
 import { InstallmentContractService } from "@/api/services/installmentContractService";
 import { RecurringContractService } from "@/api/services/recurringContractService";
+import { buildMovementMenuActions, MovementRowActions } from "./actions-config";
 
 const TransactionsPage = () => {
 	const { getTransactions, deleteTransaction, reverseTransaction } = useTransactions();
@@ -343,13 +343,15 @@ const TransactionsPage = () => {
 	const getActions = (transaction: TransactionResponse) => {
 		const asAny = transaction as unknown as Record<string, unknown>;
 		const raw = (asAny.actions ?? {}) as Record<string, unknown>;
-		return {
+		const parsed: MovementRowActions = {
 			canMarkAsPaid: Boolean(raw.canMarkAsPaid),
 			canReverse: Boolean(raw.canReverse),
 			canEditDueDate: Boolean(raw.canEditDueDate),
+			canAdjustAmount: Boolean(raw.canAdjustAmount),
 			canSkip: Boolean(raw.canSkip),
 			canViewContract: Boolean(raw.canViewContract),
 		};
+		return parsed;
 	};
 
 	const resolveSource = (transaction: TransactionResponse): "transaction" | "installment" | "recurring" | null => {
@@ -865,10 +867,30 @@ const TransactionsPage = () => {
 				const canUseOccurrenceActions =
 					actions.canMarkAsPaid ||
 					actions.canEditDueDate ||
+					actions.canAdjustAmount ||
 					actions.canSkip;
 				const canUseViewContractAction = actions.canViewContract;
 				const canUseReverseAction = actions.canReverse;
 				const isReversed = isReversedTransaction(transaction);
+				const menuActions = buildMovementMenuActions({
+					transaction,
+					actions: { ...actions, canReverse: canUseReverseAction },
+					canUseSimplePaidActions,
+					canUseOccurrenceActions,
+					canUseViewContractAction,
+					isReversed,
+					isMarkingAsPaid,
+					handlers: {
+						onEdit: handleOpenEdit,
+						onReverse: handleOpenReverse,
+						onMarkAsPaid: handleMarkAsPaid,
+						onEditDueDate: handleEditDueDate,
+						onAdjustAmount: handleViewContract,
+						onSkip: handleIgnoreThisMonth,
+						onViewContract: handleViewContract,
+						onDelete: handleOpenDelete,
+					},
+				}).filter(action => action.visible);
 
 				return (
 					<div className="text-right">
@@ -882,55 +904,20 @@ const TransactionsPage = () => {
 							<DropdownMenuContent align="end">
 								<DropdownMenuLabel>Ações</DropdownMenuLabel>
 								<DropdownMenuSeparator />
-								{canUseSimplePaidActions && (
-									<DropdownMenuItem onClick={() => handleOpenEdit(transaction)}>
-										<Edit className="mr-2 h-4 w-4 " />
-										Editar
-									</DropdownMenuItem>
-								)}
-								{canUseReverseAction && (
-									<DropdownMenuItem
-										disabled={isReversed}
-										onClick={() => handleOpenReverse(transaction)}
-									>
-										<Undo2 className="mr-2 h-4 w-4" />
-										Estornar
-									</DropdownMenuItem>
-								)}
-								{canUseOccurrenceActions && (
-									<>
-										{actions.canMarkAsPaid && (
-											<DropdownMenuItem disabled={isMarkingAsPaid} onClick={() => handleMarkAsPaid(transaction)}>
-												<CheckCircle2 className="mr-2 h-4 w-4" />
-												{isMarkingAsPaid ? "Marcando..." : "Marcar como pago"}
-											</DropdownMenuItem>
-										)}
-										{actions.canEditDueDate && (
-											<DropdownMenuItem onClick={() => handleEditDueDate(transaction)}>
-												<CalendarClock className="mr-2 h-4 w-4" />
-												Editar vencimento
-											</DropdownMenuItem>
-										)}
-										{actions.canSkip && (
-											<DropdownMenuItem onClick={() => handleIgnoreThisMonth(transaction)}>
-												<Clock className="mr-2 h-4 w-4" />
-												Ignorar este mês
-											</DropdownMenuItem>
-										)}
-									</>
-								)}
-								{canUseViewContractAction && (
-									<DropdownMenuItem onClick={() => handleViewContract(transaction)}>
-										<Eye className="mr-2 h-4 w-4" />
-										Ver contrato
-									</DropdownMenuItem>
-								)}
-								{!canUseOccurrenceActions && (
-									<DropdownMenuItem className="text-red-600" onClick={() => handleOpenDelete(transaction)}>
-										<Trash2 className="text-red-600 mr-2 h-4 w-4" />
-										Excluir
-									</DropdownMenuItem>
-								)}
+								{menuActions.map(action => {
+									const Icon = action.icon;
+									return (
+										<DropdownMenuItem
+											key={action.id}
+											disabled={action.disabled}
+											className={action.className}
+											onClick={action.onClick}
+										>
+											<Icon className={`mr-2 h-4 w-4 ${action.className ?? ""}`} />
+											{action.label}
+										</DropdownMenuItem>
+									);
+								})}
 							</DropdownMenuContent>
 						</DropdownMenu>
 					</div>

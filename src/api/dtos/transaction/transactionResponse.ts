@@ -20,6 +20,7 @@ export interface TransactionResponse {
     canMarkAsPaid?: boolean;
     canReverse?: boolean;
     canEditDueDate?: boolean;
+    canAdjustAmount?: boolean;
     canSkip?: boolean;
     canViewContract?: boolean;
   };
