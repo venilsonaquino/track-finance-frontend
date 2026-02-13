@@ -50,7 +50,13 @@ type RecurringContractDetailsResponse = {
 		interval: string;
 		amount: string;
 		status: string;
-		nextChargeDate: string;
+		nextChargeDate: string | null;
+		endsAt?: string | null;
+		ends_at?: string | null;
+		createdAt?: string | null;
+		created_at?: string | null;
+		updatedAt?: string | null;
+		updated_at?: string | null;
 	};
 	recurringInfo: {
 		value: string;
@@ -81,11 +87,13 @@ type RecurringContractDetailsResponse = {
 type RecurringContractViewModel = {
 	header: {
 		title: string;
-		subtitle: string;
+		typeLabel: string;
 		amountPerMonthLabel: string;
 		statusCode: string;
 		statusLabel: string;
 		nextChargeDateLabel: string;
+		endedAtLabel: string | null;
+		endReasonLabel: string | null;
 	};
 	info: {
 		valueLabel: string;
@@ -94,6 +102,7 @@ type RecurringContractViewModel = {
 		accountName: string;
 		categoryName: string;
 		createdAtLabel: string;
+		updatedAtLabel: string;
 	};
 	occurrences: Occurrence[];
 	limitsText: string;
@@ -104,7 +113,7 @@ type RecurringContractViewModel = {
 	};
 };
 
-const toDateLabel = (value?: string) => {
+const toDateLabel = (value?: string | null) => {
 	if (!value) return "-";
 	const parsed = new Date(value);
 	if (Number.isNaN(parsed.getTime())) return value;
@@ -164,7 +173,7 @@ const toPeriodicityLabel = (value?: string) => {
 	}
 };
 
-const toStatusLabel = (value?: string) => {
+const toStatusLabel = (value?: string | null) => {
 	switch ((value ?? "").toUpperCase()) {
 		case "ACTIVE":
 			return "Ativo";
@@ -174,23 +183,32 @@ const toStatusLabel = (value?: string) => {
 			return "Pausado";
 		case "CLOSED":
 			return "Encerrado";
+		case "CANCELED":
+		case "CANCELLED":
+			return "Cancelado";
 		default:
 			return value || "Ativo";
 	}
 };
 
-const getContractStatusMeta = (status?: string) => {
+const getContractStatusMeta = (status?: string | null) => {
 	switch ((status ?? "").toUpperCase()) {
 		case "PAUSED":
 			return {
 				badgeClassName: "border-amber-500/30 bg-amber-500/10 text-amber-300",
 				panelClassName: "border-amber-500/30 bg-amber-500/5",
 			};
-		case "CLOSED":
-		case "INACTIVE":
+		case "CANCELED":
+		case "CANCELLED":
 			return {
 				badgeClassName: "border-rose-500/30 bg-rose-500/10 text-rose-300",
 				panelClassName: "border-rose-500/30 bg-rose-500/5",
+			};
+		case "CLOSED":
+		case "INACTIVE":
+			return {
+				badgeClassName: "border-zinc-500/30 bg-zinc-500/10 text-zinc-300",
+				panelClassName: "border-zinc-500/30 bg-zinc-500/5",
 			};
 		case "ACTIVE":
 		default:
@@ -223,11 +241,13 @@ const buildFallbackData = (transaction: TransactionResponse | null): RecurringCo
 	return {
 		header: {
 			title,
-			subtitle: "Recorrência mensal",
+			typeLabel: "Recorrência mensal",
 			amountPerMonthLabel: `${amountLabel} por mês`,
 			statusCode: "ACTIVE",
 			statusLabel: "Ativo",
 			nextChargeDateLabel: toDateLabel(transaction?.depositedDate),
+			endedAtLabel: null,
+			endReasonLabel: null,
 		},
 		info: {
 			valueLabel: amountLabel,
@@ -236,6 +256,7 @@ const buildFallbackData = (transaction: TransactionResponse | null): RecurringCo
 			accountName: transaction?.wallet?.name || "-",
 			categoryName: transaction?.category?.name || "-",
 			createdAtLabel: "-",
+			updatedAtLabel: "-",
 		},
 		occurrences: [],
 		limitsText: "Exibindo últimas 3 pagas e próximas 3 futuras.",
@@ -251,6 +272,7 @@ const mapApiToView = (data: RecurringContractDetailsResponse, fallback: Transact
 	const amount = Math.abs(parseAmount(data?.contract?.amount ?? 0));
 	const value = Math.abs(parseAmount(data?.recurringInfo?.value ?? amount));
 	const totalPaid = Math.abs(parseAmount(data?.financialSummary?.totalPaid ?? 0));
+	const normalizedStatus = normalizeContractStatus(data?.contract?.status);
 
 	const occurrences: Occurrence[] = (data?.occurrenceHistory?.items ?? []).map((item, index) => {
 		const status: Occurrence["status"] = item.status === "PAID" ? "PAID" : "FUTURE";
@@ -264,14 +286,41 @@ const mapApiToView = (data: RecurringContractDetailsResponse, fallback: Transact
 		};
 	});
 
+	const contractData = (data?.contract ?? {}) as Record<string, unknown>;
+	const endedAtRaw =
+		(typeof contractData.canceledAt === "string" ? contractData.canceledAt : null) ??
+		(typeof contractData.cancelledAt === "string" ? contractData.cancelledAt : null) ??
+		(typeof contractData.closedAt === "string" ? contractData.closedAt : null) ??
+		(typeof contractData.endedAt === "string" ? contractData.endedAt : null) ??
+		(typeof contractData.endsAt === "string" ? contractData.endsAt : null) ??
+		(typeof contractData.ends_at === "string" ? contractData.ends_at : null) ??
+		null;
+	const createdAtRaw =
+		(typeof contractData.createdAt === "string" ? contractData.createdAt : null) ??
+		(typeof contractData.created_at === "string" ? contractData.created_at : null) ??
+		(typeof data?.recurringInfo?.createdAt === "string" ? data.recurringInfo.createdAt : null) ??
+		null;
+	const updatedAtRaw =
+		(typeof contractData.updatedAt === "string" ? contractData.updatedAt : null) ??
+		(typeof contractData.updated_at === "string" ? contractData.updated_at : null) ??
+		null;
+	const endReasonRaw =
+		(typeof contractData.cancelReason === "string" ? contractData.cancelReason : null) ??
+		(typeof contractData.cancellationReason === "string" ? contractData.cancellationReason : null) ??
+		(typeof contractData.closeReason === "string" ? contractData.closeReason : null) ??
+		(typeof contractData.reason === "string" ? contractData.reason : null) ??
+		null;
+
 	return {
 		header: {
 			title: data?.contract?.title || fallback.description || "Contrato fixo",
-			subtitle: "Recorrência mensal",
+			typeLabel: "Recorrência mensal",
 			amountPerMonthLabel: `${formatCurrency(amount)} por mês`,
-			statusCode: String(data?.contract?.status ?? "ACTIVE").toUpperCase(),
-			statusLabel: toStatusLabel(data?.contract?.status),
+			statusCode: normalizedStatus,
+			statusLabel: toStatusLabel(normalizedStatus),
 			nextChargeDateLabel: toDateLabel(data?.contract?.nextChargeDate),
+			endedAtLabel: endedAtRaw ? toDateLabel(endedAtRaw) : null,
+			endReasonLabel: endReasonRaw || null,
 		},
 		info: {
 			valueLabel: formatCurrency(value),
@@ -279,7 +328,8 @@ const mapApiToView = (data: RecurringContractDetailsResponse, fallback: Transact
 			billingDayLabel: data?.recurringInfo?.billingDay ? `Todo dia ${data.recurringInfo.billingDay}` : "Todo dia -",
 			accountName: data?.recurringInfo?.account?.name || fallback.wallet?.name || "-",
 			categoryName: data?.recurringInfo?.category?.name || fallback.category?.name || "-",
-			createdAtLabel: data?.recurringInfo?.createdAt ? toDateLabel(data.recurringInfo.createdAt) : "-",
+			createdAtLabel: createdAtRaw ? toDateLabel(createdAtRaw) : "-",
+			updatedAtLabel: updatedAtRaw ? toDateLabel(updatedAtRaw) : "-",
 		},
 		occurrences,
 		limitsText: `Exibindo últimas ${data?.occurrenceHistory?.paidLimit ?? 3} pagas e próximas ${data?.occurrenceHistory?.futureLimit ?? 3} futuras.`,
@@ -306,7 +356,9 @@ export const ContractRecurringDetailsDrawer = ({
 	const [savingAmount, setSavingAmount] = useState(false);
 	const [isPausingContract, setIsPausingContract] = useState(false);
 	const [isClosingContract, setIsClosingContract] = useState(false);
-	const [pendingContractAction, setPendingContractAction] = useState<"pause" | "resume" | "close" | null>(null);
+	const [pendingContractAction, setPendingContractAction] = useState<
+		"pause" | "resume" | "close" | "reactivate" | "delete" | null
+	>(null);
 
 	const contractId = useMemo(
 		() => (transaction ? resolveRecurringContractId(transaction) : null),
@@ -363,8 +415,9 @@ export const ContractRecurringDetailsDrawer = ({
 	);
 	const isActiveContract = viewData.header.statusCode === "ACTIVE";
 	const isPausedContract = viewData.header.statusCode === "PAUSED";
+	const isCanceledContract = viewData.header.statusCode === "CANCELED";
 	const isClosedContract =
-		viewData.header.statusCode === "CLOSED" || viewData.header.statusCode === "INACTIVE";
+		viewData.header.statusCode === "CLOSED" || viewData.header.statusCode === "INACTIVE" || isCanceledContract;
 	const parsedPreviewAmount = parseCurrencyInput(amountInput);
 	const previewAmount = Number.isNaN(parsedPreviewAmount) ? 0 : parsedPreviewAmount;
 
@@ -433,6 +486,16 @@ export const ContractRecurringDetailsDrawer = ({
 		setPendingContractAction(isPausedContract ? "resume" : "pause");
 	};
 
+	const handleReactivateContract = () => {
+		if (!contractId) return;
+		setPendingContractAction("reactivate");
+	};
+
+	const handleDeleteContract = () => {
+		if (!contractId) return;
+		setPendingContractAction("delete");
+	};
+
 	const handleCloseContract = async () => {
 		if (!contractId) return;
 		if (isClosedContract) {
@@ -445,31 +508,41 @@ export const ContractRecurringDetailsDrawer = ({
 	const handleConfirmContractAction = async () => {
 		if (!contractId || !pendingContractAction) return;
 
-		if (pendingContractAction === "pause" || pendingContractAction === "resume") {
+		if (
+			pendingContractAction === "pause" ||
+			pendingContractAction === "resume" ||
+			pendingContractAction === "reactivate"
+		) {
 			setIsPausingContract(true);
 			try {
-				if (pendingContractAction === "resume") {
+				if (pendingContractAction === "resume" || pendingContractAction === "reactivate") {
 					await RecurringContractService.resumeContract(contractId);
 				} else {
 					await RecurringContractService.pauseContract(contractId);
 				}
 				await reloadContractDetails();
 				toast.success(
-					pendingContractAction === "resume"
-						? "Contrato retomado com sucesso."
+					pendingContractAction === "resume" || pendingContractAction === "reactivate"
+						? "Contrato reativado com sucesso."
 						: "Contrato pausado com sucesso."
 				);
 				setPendingContractAction(null);
 			} catch (err) {
 				console.error(err);
 				toast.error(
-					pendingContractAction === "resume"
-						? "Não foi possível retomar o contrato."
+					pendingContractAction === "resume" || pendingContractAction === "reactivate"
+						? "Não foi possível reativar o contrato."
 						: "Não foi possível pausar o contrato."
 				);
 			} finally {
 				setIsPausingContract(false);
 			}
+			return;
+		}
+
+		if (pendingContractAction === "delete") {
+			toast.info("Exclusão definitiva ainda não implementada.");
+			setPendingContractAction(null);
 			return;
 		}
 
@@ -488,7 +561,9 @@ export const ContractRecurringDetailsDrawer = ({
 	};
 
 	const isConfirmingContractAction =
-		pendingContractAction === "pause" || pendingContractAction === "resume"
+		pendingContractAction === "pause" ||
+		pendingContractAction === "resume" ||
+		pendingContractAction === "reactivate"
 			? isPausingContract
 			: isClosingContract;
 
@@ -497,19 +572,31 @@ export const ContractRecurringDetailsDrawer = ({
 			? "Pausar recorrência"
 			: pendingContractAction === "resume"
 				? "Retomar recorrência"
-				: "Encerrar recorrência";
+				: pendingContractAction === "reactivate"
+					? "Reativar contrato"
+					: pendingContractAction === "delete"
+						? "Excluir definitivamente"
+						: "Encerrar recorrência";
 	const confirmContractActionDescription =
 		pendingContractAction === "pause"
 			? "Deseja pausar este contrato recorrente?"
 			: pendingContractAction === "resume"
 				? "Deseja retomar este contrato recorrente?"
-			: "Deseja encerrar esta recorrência? As ocorrências já pagas não serão alteradas.";
+				: pendingContractAction === "reactivate"
+					? "Deseja reativar este contrato recorrente?"
+					: pendingContractAction === "delete"
+						? "Deseja excluir definitivamente este contrato?"
+						: "Deseja encerrar esta recorrência? As ocorrências já pagas não serão alteradas.";
 	const confirmContractActionLabel =
 		pendingContractAction === "pause"
 			? "Pausar contrato"
 			: pendingContractAction === "resume"
 				? "Retomar contrato"
-				: "Encerrar contrato";
+				: pendingContractAction === "reactivate"
+					? "Reativar contrato"
+					: pendingContractAction === "delete"
+						? "Excluir definitivamente"
+						: "Encerrar contrato";
 
 	return (
 		<>
@@ -534,19 +621,24 @@ export const ContractRecurringDetailsDrawer = ({
 					<div className="py-5 space-y-5">
 						<div className={`space-y-2 rounded-lg border p-3 ${statusMeta.panelClassName}`}>
 							<p className="text-lg font-semibold">{viewData.header.title}</p>
-							<p className="text-sm text-muted-foreground">{viewData.header.subtitle}</p>
+							<p className="text-sm text-muted-foreground">Tipo: {viewData.header.typeLabel}</p>
 							<p className="text-sm font-medium">{viewData.header.amountPerMonthLabel}</p>
 							<div className="flex items-center gap-2 flex-wrap">
 								<Badge variant="outline" className={statusMeta.badgeClassName}>
 									Status: {viewData.header.statusLabel}
 								</Badge>
-								<Badge variant="outline">Recorrente</Badge>
 							</div>
 							<div className="text-sm space-y-0.5">
 								<p className="text-muted-foreground text-xs">Próxima cobrança</p>
-								<p>{viewData.header.nextChargeDateLabel}</p>
+								<p>{isClosedContract ? "-" : viewData.header.nextChargeDateLabel}</p>
 							</div>
-						</div>
+								{isCanceledContract && (
+									<div className="rounded-md border border-zinc-500/25 bg-zinc-500/5 p-2 text-xs space-y-1">
+										<p>Encerrado em: {viewData.header.endedAtLabel ?? "-"}</p>
+										<p>Motivo: {viewData.header.endReasonLabel ?? "Encerrado manualmente"}</p>
+									</div>
+								)}
+							</div>
 
 						<Separator />
 
@@ -576,6 +668,10 @@ export const ContractRecurringDetailsDrawer = ({
 								<div>
 									<p className="text-muted-foreground text-xs">Criado em</p>
 									<p>{viewData.info.createdAtLabel}</p>
+								</div>
+								<div>
+									<p className="text-muted-foreground text-xs">Atualizado em</p>
+									<p>{viewData.info.updatedAtLabel}</p>
 								</div>
 							</div>
 						</div>
@@ -639,38 +735,63 @@ export const ContractRecurringDetailsDrawer = ({
 
 				<SheetFooter className="mt-auto border-t px-5 py-4 bg-background">
 					<div className="w-full rounded-lg border p-3 space-y-2">
-						<Button
-							type="button"
-							variant="outline"
-							className="w-full"
-							onClick={handlePauseContract}
-							disabled={isPausingContract || isClosingContract || isClosedContract}
-						>
-							{isPausingContract ? (
-								<>
-									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-									{isPausedContract ? "Retomando..." : "Pausando..."}
-								</>
-							) : (
-								isPausedContract ? "Retomar recorrência" : "Pausar recorrência"
-							)}
-						</Button>
-						<Button
-							type="button"
-							variant="destructive"
-							className="w-full"
-							onClick={handleCloseContract}
-							disabled={isPausingContract || isClosingContract || isClosedContract}
-						>
-							{isClosingContract ? (
-								<>
-									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-									Encerrando...
-								</>
-							) : (
-								"Encerrar recorrência"
-							)}
-						</Button>
+						{isCanceledContract ? (
+							<>
+								<Button
+									type="button"
+									variant="outline"
+									className="w-full"
+									onClick={handleReactivateContract}
+									disabled={isPausingContract || isClosingContract}
+								>
+									Reativar contrato
+								</Button>
+								<Button
+									type="button"
+									variant="destructive"
+									className="w-full"
+									onClick={handleDeleteContract}
+									disabled={isPausingContract || isClosingContract}
+								>
+									Excluir definitivamente
+								</Button>
+							</>
+						) : (
+							<>
+								<Button
+									type="button"
+									variant="outline"
+									className="w-full"
+									onClick={handlePauseContract}
+									disabled={isPausingContract || isClosingContract || isClosedContract}
+								>
+									{isPausingContract ? (
+										<>
+											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+											{isPausedContract ? "Retomando..." : "Pausando..."}
+										</>
+									) : (
+										isPausedContract ? "Retomar recorrência" : "Pausar recorrência"
+									)}
+								</Button>
+								<Button
+									type="button"
+									variant="destructive"
+									className="w-full"
+									onClick={handleCloseContract}
+									disabled={isPausingContract || isClosingContract || isClosedContract}
+								>
+									{isClosingContract ? (
+										<>
+											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+											Encerrando...
+										</>
+									) : (
+										"Encerrar recorrência"
+									)}
+								</Button>
+							</>
+						)}
 					</div>
 				</SheetFooter>
 			</SheetContent>
@@ -687,7 +808,7 @@ export const ContractRecurringDetailsDrawer = ({
 					</Button>
 					<Button
 						type="button"
-						variant={pendingContractAction === "close" ? "destructive" : "default"}
+						variant={pendingContractAction === "close" || pendingContractAction === "delete" ? "destructive" : "default"}
 						onClick={handleConfirmContractAction}
 						disabled={isConfirmingContractAction}
 					>
@@ -762,4 +883,9 @@ export const ContractRecurringDetailsDrawer = ({
 		</Dialog>
 		</>
 	);
+};
+const normalizeContractStatus = (status?: string | null) => {
+	const normalized = String(status ?? "ACTIVE").toUpperCase();
+	if (normalized === "CANCELLED") return "CANCELED";
+	return normalized;
 };
