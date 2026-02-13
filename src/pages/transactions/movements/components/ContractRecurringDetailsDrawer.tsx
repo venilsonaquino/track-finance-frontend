@@ -83,6 +83,7 @@ type RecurringContractViewModel = {
 		title: string;
 		subtitle: string;
 		amountPerMonthLabel: string;
+		statusCode: string;
 		statusLabel: string;
 		nextChargeDateLabel: string;
 	};
@@ -171,8 +172,32 @@ const toStatusLabel = (value?: string) => {
 			return "Inativo";
 		case "PAUSED":
 			return "Pausado";
+		case "CLOSED":
+			return "Encerrado";
 		default:
 			return value || "Ativo";
+	}
+};
+
+const getContractStatusMeta = (status?: string) => {
+	switch ((status ?? "").toUpperCase()) {
+		case "PAUSED":
+			return {
+				badgeClassName: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+				panelClassName: "border-amber-500/30 bg-amber-500/5",
+			};
+		case "CLOSED":
+		case "INACTIVE":
+			return {
+				badgeClassName: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+				panelClassName: "border-rose-500/30 bg-rose-500/5",
+			};
+		case "ACTIVE":
+		default:
+			return {
+				badgeClassName: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+				panelClassName: "border-emerald-500/30 bg-emerald-500/5",
+			};
 	}
 };
 
@@ -200,6 +225,7 @@ const buildFallbackData = (transaction: TransactionResponse | null): RecurringCo
 			title,
 			subtitle: "Recorrência mensal",
 			amountPerMonthLabel: `${amountLabel} por mês`,
+			statusCode: "ACTIVE",
 			statusLabel: "Ativo",
 			nextChargeDateLabel: toDateLabel(transaction?.depositedDate),
 		},
@@ -243,6 +269,7 @@ const mapApiToView = (data: RecurringContractDetailsResponse, fallback: Transact
 			title: data?.contract?.title || fallback.description || "Contrato fixo",
 			subtitle: "Recorrência mensal",
 			amountPerMonthLabel: `${formatCurrency(amount)} por mês`,
+			statusCode: String(data?.contract?.status ?? "ACTIVE").toUpperCase(),
 			statusLabel: toStatusLabel(data?.contract?.status),
 			nextChargeDateLabel: toDateLabel(data?.contract?.nextChargeDate),
 		},
@@ -277,6 +304,9 @@ export const ContractRecurringDetailsDrawer = ({
 	const [amountInput, setAmountInput] = useState("");
 	const [scope, setScope] = useState<"single" | "future">("single");
 	const [savingAmount, setSavingAmount] = useState(false);
+	const [isPausingContract, setIsPausingContract] = useState(false);
+	const [isClosingContract, setIsClosingContract] = useState(false);
+	const [pendingContractAction, setPendingContractAction] = useState<"pause" | "resume" | "close" | null>(null);
 
 	const contractId = useMemo(
 		() => (transaction ? resolveRecurringContractId(transaction) : null),
@@ -322,10 +352,19 @@ export const ContractRecurringDetailsDrawer = ({
 			setSelectedOccurrence(null);
 			setAmountInput("");
 			setScope("single");
+			setPendingContractAction(null);
 		}
 	}, [open]);
 
 	const viewData = useMemo(() => data ?? buildFallbackData(transaction), [data, transaction]);
+	const statusMeta = useMemo(
+		() => getContractStatusMeta(viewData.header.statusCode),
+		[viewData.header.statusCode]
+	);
+	const isActiveContract = viewData.header.statusCode === "ACTIVE";
+	const isPausedContract = viewData.header.statusCode === "PAUSED";
+	const isClosedContract =
+		viewData.header.statusCode === "CLOSED" || viewData.header.statusCode === "INACTIVE";
 	const parsedPreviewAmount = parseCurrencyInput(amountInput);
 	const previewAmount = Number.isNaN(parsedPreviewAmount) ? 0 : parsedPreviewAmount;
 
@@ -379,6 +418,99 @@ export const ContractRecurringDetailsDrawer = ({
 		}
 	};
 
+	const reloadContractDetails = async () => {
+		if (!contractId || !transaction) return;
+		const response = await RecurringContractService.getRecurringContractDetailsById(contractId);
+		setData(mapApiToView(response.data as RecurringContractDetailsResponse, transaction));
+	};
+
+	const handlePauseContract = async () => {
+		if (!contractId) return;
+		if (!isActiveContract && !isPausedContract) {
+			toast.info("Este contrato não pode ser pausado/retomado.");
+			return;
+		}
+		setPendingContractAction(isPausedContract ? "resume" : "pause");
+	};
+
+	const handleCloseContract = async () => {
+		if (!contractId) return;
+		if (isClosedContract) {
+			toast.info("Este contrato já está encerrado.");
+			return;
+		}
+		setPendingContractAction("close");
+	};
+
+	const handleConfirmContractAction = async () => {
+		if (!contractId || !pendingContractAction) return;
+
+		if (pendingContractAction === "pause" || pendingContractAction === "resume") {
+			setIsPausingContract(true);
+			try {
+				if (pendingContractAction === "resume") {
+					await RecurringContractService.resumeContract(contractId);
+				} else {
+					await RecurringContractService.pauseContract(contractId);
+				}
+				await reloadContractDetails();
+				toast.success(
+					pendingContractAction === "resume"
+						? "Contrato retomado com sucesso."
+						: "Contrato pausado com sucesso."
+				);
+				setPendingContractAction(null);
+			} catch (err) {
+				console.error(err);
+				toast.error(
+					pendingContractAction === "resume"
+						? "Não foi possível retomar o contrato."
+						: "Não foi possível pausar o contrato."
+				);
+			} finally {
+				setIsPausingContract(false);
+			}
+			return;
+		}
+
+		setIsClosingContract(true);
+		try {
+			await RecurringContractService.closeContract(contractId);
+			await reloadContractDetails();
+			toast.success("Contrato encerrado com sucesso.");
+			setPendingContractAction(null);
+		} catch (err) {
+			console.error(err);
+			toast.error("Não foi possível encerrar o contrato.");
+		} finally {
+			setIsClosingContract(false);
+		}
+	};
+
+	const isConfirmingContractAction =
+		pendingContractAction === "pause" || pendingContractAction === "resume"
+			? isPausingContract
+			: isClosingContract;
+
+	const confirmContractActionTitle =
+		pendingContractAction === "pause"
+			? "Pausar recorrência"
+			: pendingContractAction === "resume"
+				? "Retomar recorrência"
+				: "Encerrar recorrência";
+	const confirmContractActionDescription =
+		pendingContractAction === "pause"
+			? "Deseja pausar este contrato recorrente?"
+			: pendingContractAction === "resume"
+				? "Deseja retomar este contrato recorrente?"
+			: "Deseja encerrar esta recorrência? As ocorrências já pagas não serão alteradas.";
+	const confirmContractActionLabel =
+		pendingContractAction === "pause"
+			? "Pausar contrato"
+			: pendingContractAction === "resume"
+				? "Retomar contrato"
+				: "Encerrar contrato";
+
 	return (
 		<>
 		<Sheet open={open} onOpenChange={onOpenChange}>
@@ -400,12 +532,14 @@ export const ContractRecurringDetailsDrawer = ({
 
 				<ScrollArea className="flex-1 min-h-0 px-5">
 					<div className="py-5 space-y-5">
-						<div className="space-y-2">
+						<div className={`space-y-2 rounded-lg border p-3 ${statusMeta.panelClassName}`}>
 							<p className="text-lg font-semibold">{viewData.header.title}</p>
 							<p className="text-sm text-muted-foreground">{viewData.header.subtitle}</p>
 							<p className="text-sm font-medium">{viewData.header.amountPerMonthLabel}</p>
 							<div className="flex items-center gap-2 flex-wrap">
-								<Badge variant="secondary">Status: {viewData.header.statusLabel}</Badge>
+								<Badge variant="outline" className={statusMeta.badgeClassName}>
+									Status: {viewData.header.statusLabel}
+								</Badge>
 								<Badge variant="outline">Recorrente</Badge>
 							</div>
 							<div className="text-sm space-y-0.5">
@@ -509,28 +643,60 @@ export const ContractRecurringDetailsDrawer = ({
 							type="button"
 							variant="outline"
 							className="w-full"
-							onClick={() => toast.info("Ação de pausar recorrência ainda não implementada.")}
+							onClick={handlePauseContract}
+							disabled={isPausingContract || isClosingContract || isClosedContract}
 						>
-							Pausar recorrência
+							{isPausingContract ? (
+								<>
+									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+									{isPausedContract ? "Retomando..." : "Pausando..."}
+								</>
+							) : (
+								isPausedContract ? "Retomar recorrência" : "Pausar recorrência"
+							)}
 						</Button>
 						<Button
 							type="button"
 							variant="destructive"
 							className="w-full"
-							onClick={() => {
-								const confirmed = window.confirm(
-									"Deseja encerrar esta recorrência? As ocorrências já pagas não serão alteradas."
-								);
-								if (!confirmed) return;
-								toast.info("Ação de encerrar recorrência ainda não implementada.");
-							}}
+							onClick={handleCloseContract}
+							disabled={isPausingContract || isClosingContract || isClosedContract}
 						>
-							Encerrar recorrência
+							{isClosingContract ? (
+								<>
+									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+									Encerrando...
+								</>
+							) : (
+								"Encerrar recorrência"
+							)}
 						</Button>
 					</div>
 				</SheetFooter>
 			</SheetContent>
 		</Sheet>
+		<Dialog open={pendingContractAction !== null} onOpenChange={(open) => !open && setPendingContractAction(null)}>
+			<DialogContent className="sm:max-w-md">
+				<DialogHeader>
+					<DialogTitle>{confirmContractActionTitle}</DialogTitle>
+					<DialogDescription>{confirmContractActionDescription}</DialogDescription>
+				</DialogHeader>
+				<DialogFooter>
+					<Button type="button" variant="outline" onClick={() => setPendingContractAction(null)}>
+						Cancelar
+					</Button>
+					<Button
+						type="button"
+						variant={pendingContractAction === "close" ? "destructive" : "default"}
+						onClick={handleConfirmContractAction}
+						disabled={isConfirmingContractAction}
+					>
+						{isConfirmingContractAction ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+						{confirmContractActionLabel}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 		<Dialog open={isEditAmountOpen} onOpenChange={setIsEditAmountOpen}>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>

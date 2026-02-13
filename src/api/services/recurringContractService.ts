@@ -14,4 +14,10 @@ export const RecurringContractService = {
     HttpClient.patch(`/contracts/recurring/${contractId}/occurrences/${dueDate}/amount`, { amount }),
   updateOccurrenceAmountFuture: (contractId: string, dueDate: string, amount: string) =>
     HttpClient.patch(`/contracts/recurring/${contractId}/occurrences/${dueDate}/amount/future`, { amount }),
+  pauseContract: (contractId: string) =>
+    HttpClient.patch(`/contracts/recurring/${contractId}/pause`),
+  resumeContract: (contractId: string) =>
+    HttpClient.patch(`/contracts/recurring/${contractId}/resume`),
+  closeContract: (contractId: string) =>
+    HttpClient.patch(`/contracts/recurring/${contractId}/close`),
 };
