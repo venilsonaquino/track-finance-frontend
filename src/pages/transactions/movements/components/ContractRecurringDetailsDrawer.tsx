@@ -287,6 +287,7 @@ const mapApiToView = (data: RecurringContractDetailsResponse, fallback: Transact
 	});
 
 	const contractData = (data?.contract ?? {}) as Record<string, unknown>;
+	const recurringInfoData = (data?.recurringInfo ?? {}) as Record<string, unknown>;
 	const endedAtRaw =
 		(typeof contractData.canceledAt === "string" ? contractData.canceledAt : null) ??
 		(typeof contractData.cancelledAt === "string" ? contractData.cancelledAt : null) ??
@@ -298,7 +299,16 @@ const mapApiToView = (data: RecurringContractDetailsResponse, fallback: Transact
 	const createdAtRaw =
 		(typeof contractData.createdAt === "string" ? contractData.createdAt : null) ??
 		(typeof contractData.created_at === "string" ? contractData.created_at : null) ??
-		(typeof data?.recurringInfo?.createdAt === "string" ? data.recurringInfo.createdAt : null) ??
+		(typeof recurringInfoData.createdAt === "string" ? recurringInfoData.createdAt : null) ??
+		(typeof recurringInfoData.created_at === "string" ? recurringInfoData.created_at : null) ??
+		(typeof (data as unknown as Record<string, unknown>).createdAt === "string"
+			? ((data as unknown as Record<string, unknown>).createdAt as string)
+			: null) ??
+		(typeof (data as unknown as Record<string, unknown>).created_at === "string"
+			? ((data as unknown as Record<string, unknown>).created_at as string)
+			: null) ??
+		fallback.depositedDate ??
+		fallback.transactionDate ??
 		null;
 	const updatedAtRaw =
 		(typeof contractData.updatedAt === "string" ? contractData.updatedAt : null) ??
@@ -678,43 +688,47 @@ export const ContractRecurringDetailsDrawer = ({
 
 						<Separator />
 
-						<div className="space-y-3">
-							<p className="text-sm font-semibold">Histórico de Ocorrências</p>
-							<div className="space-y-2">
-								{viewData.occurrences.length === 0 && (
-									<p className="text-sm text-muted-foreground">Sem ocorrências para este contrato.</p>
-								)}
-								{viewData.occurrences.map(item => (
-									<div key={item.id} className="flex items-center justify-between rounded-md border px-3 py-2">
-										<div className="flex items-center gap-2 text-sm">
-											{item.status === "PAID" ? (
-												<CheckCircle2 className="h-4 w-4 text-emerald-600" />
-											) : (
-												<Clock3 className="h-4 w-4 text-muted-foreground" />
+							<div className="space-y-3">
+								{!isCanceledContract && (
+									<>
+										<p className="text-sm font-semibold">Histórico de Ocorrências</p>
+										<div className="space-y-2">
+											{viewData.occurrences.length === 0 && (
+												<p className="text-sm text-muted-foreground">Sem ocorrências para este contrato.</p>
 											)}
-											<span>{toDateLabel(item.date)} - {item.amountLabel}</span>
+											{viewData.occurrences.map(item => (
+												<div key={item.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+													<div className="flex items-center gap-2 text-sm">
+														{item.status === "PAID" ? (
+															<CheckCircle2 className="h-4 w-4 text-emerald-600" />
+														) : (
+															<Clock3 className="h-4 w-4 text-muted-foreground" />
+														)}
+														<span>{toDateLabel(item.date)} - {item.amountLabel}</span>
+													</div>
+													<div className="flex items-center gap-2">
+														<Badge variant={item.status === "PAID" ? "secondary" : "outline"}>
+															{item.status === "PAID" ? "Paga" : "Futura"}
+														</Badge>
+														<Button
+															type="button"
+															variant="ghost"
+															size="sm"
+															className="h-7 px-2 text-xs"
+															onClick={() => openEditAmountModal(item)}
+														>
+															Ajustar valor
+														</Button>
+													</div>
+												</div>
+											))}
 										</div>
-										<div className="flex items-center gap-2">
-											<Badge variant={item.status === "PAID" ? "secondary" : "outline"}>
-												{item.status === "PAID" ? "Paga" : "Futura"}
-											</Badge>
-											<Button
-												type="button"
-												variant="ghost"
-												size="sm"
-												className="h-7 px-2 text-xs"
-												onClick={() => openEditAmountModal(item)}
-											>
-												Ajustar valor
-											</Button>
-										</div>
-									</div>
-								))}
-							</div>
-							<p className="text-xs text-muted-foreground">{viewData.limitsText}</p>
-							<Button
-								variant="link"
-								className="px-0 h-auto text-sm"
+										<p className="text-xs text-muted-foreground">{viewData.limitsText}</p>
+									</>
+								)}
+								<Button
+									variant="link"
+									className="px-0 h-auto text-sm"
 								onClick={() => toast.info("Histórico completo ainda não disponível.")}
 								disabled={!viewData.hasMoreHistory}
 							>
