@@ -626,7 +626,7 @@ const TransactionsPage = () => {
 		if (!Number.isFinite(previous)) {
 			return {
 				amountText: "▲ +R$ 0",
-				helperText: `(sem base em ${previousMonthLabel})`,
+				helperText: `Sem base comparativa`,
 				className: "text-muted-foreground",
 				icon: "",
 			};
@@ -635,7 +635,7 @@ const TransactionsPage = () => {
 		if (previous === 0 && current === 0) {
 			return {
 				amountText: "▲ +R$ 0",
-				helperText: `(igual a ${previousMonthLabel})`,
+				helperText: `Sem variação no período`,
 				className: "text-muted-foreground",
 				icon: "—",
 			};
@@ -656,10 +656,10 @@ const TransactionsPage = () => {
 
 			const helperText =
 				kind === "expense"
-					? `(novo gasto este mês)`
+					? `Novo gasto no período`
 					: kind === "income"
-						? `(nova receita este mês)`
-						: `(novo saldo este mês)`;
+						? `Primeira receita no período`
+						: `Sem base comparativa`;
 
 			return {
 				amountText: `${icon} ${sign}${formatCurrency(Math.abs(diff))}`,
@@ -685,31 +685,17 @@ const TransactionsPage = () => {
 		if (diff === 0) {
 			return {
 				amountText: "▲ +R$ 0",
-				helperText: `(igual a ${previousMonthLabel})`,
+				helperText: `Sem variação vs ${previousMonthLabel}`,
 				className: "text-muted-foreground",
 				icon,
 			};
 		}
 
-		const percentRaw = (diff / previous) * 100;
+		const percentRaw = (diff / Math.abs(previous)) * 100;
 		const percent = Number.isFinite(percentRaw) ? Math.round(percentRaw) : null;
-		const multiplierRaw = Math.abs(diff) / Math.abs(previous);
-		const multiplier = Number.isFinite(multiplierRaw)
-			? Number(multiplierRaw.toFixed(1)).toString().replace(/\.0$/, "")
-			: null;
-
-		const relation = (() => {
-			if (current === 0 && previous > 0 && percent !== null) {
-				return `(-100% vs ${previousMonthLabel})`;
-			}
-			if (kind === "balance" && percent !== null) {
-				return `(${Math.abs(percent)}% ${positive ? "maior" : "menor"} que ${previousMonthLabel})`;
-			}
-			if (multiplier) {
-				return `(${multiplier}x ${positive ? "maior" : "menor"} que ${previousMonthLabel})`;
-			}
-			return `(vs ${previousMonthLabel})`;
-		})();
+		const relation = percent !== null
+			? `${percent > 0 ? "+" : ""}${percent}% vs ${previousMonthLabel}`
+			: `vs ${previousMonthLabel}`;
 
 		return {
 			amountText: `${icon} ${sign}${formatCurrency(Math.abs(diff))}`,
