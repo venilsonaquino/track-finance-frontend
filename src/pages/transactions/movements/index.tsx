@@ -4,8 +4,7 @@ import { useTransactions } from "../hooks/use-transactions";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Clock, MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
@@ -875,31 +874,12 @@ const TransactionsPage = () => {
 			size: 300,
 			cell: ({ row }) => {
 				const description = row.getValue("description") as string;
-				const transaction = row.original as MovementItem;
-				const isScheduled = isScheduledOccurrence(transaction);
-				const isReversed = isReversedTransaction(transaction);
 				
 				return (
-					<div className="flex items-center justify-center gap-2 text-center">
+					<div className="flex items-center justify-center text-center">
 						<span title={description} className="truncate">
 							{description}
 						</span>
-						{isScheduled ? (
-							<>
-								<Badge variant="secondary" className="text-[10px] text-muted-foreground" title="Ainda não debitada">
-									<Clock className="mr-1 h-3 w-3 text-muted-foreground" />
-									Agendada
-								</Badge>
-							</>
-						) : isReversed ? (
-							<Badge className="text-[10px] bg-amber-500/15 text-amber-700 hover:bg-amber-500/15">
-								Estornada
-							</Badge>
-						) : (
-							<Badge className="text-[10px] bg-blue-500/15 text-blue-600 hover:bg-blue-500/15">
-								Paga
-							</Badge>
-						)}
 					</div>
 				);
 			},
