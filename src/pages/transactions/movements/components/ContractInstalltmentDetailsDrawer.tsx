@@ -255,6 +255,9 @@ export const ContractInstallmentDetailsDrawer = ({
 	const [selectedOccurrence, setSelectedOccurrence] = useState<OccurrenceItem | null>(null);
 	const [amountInput, setAmountInput] = useState("");
 	const [savingAmount, setSavingAmount] = useState(false);
+	const [pendingContractAction, setPendingContractAction] = useState<
+		"cancel-future" | "change-wallet" | "end-contract" | null
+	>(null);
 
 	useEffect(() => {
 		if (!open || !transaction) return;
@@ -304,11 +307,7 @@ export const ContractInstallmentDetailsDrawer = ({
 			toast.info("Não há parcelas futuras para cancelar.");
 			return;
 		}
-		const confirmed = window.confirm(
-			`Você deseja cancelar as ${futureCount} parcelas futuras?\nAs já pagas não serão afetadas.`
-		);
-		if (!confirmed) return;
-		toast.info("Cancelamento de parcelas futuras ainda não implementado.");
+		setPendingContractAction("cancel-future");
 	};
 
 	const handleChangeCategoryForFuture = () => {
@@ -324,20 +323,43 @@ export const ContractInstallmentDetailsDrawer = ({
 			toast.info("Não há parcelas futuras para alterar.");
 			return;
 		}
-		const confirmed = window.confirm(
-			"Alterar carteira/cartão impacta as parcelas futuras. Deseja continuar?"
-		);
-		if (!confirmed) return;
-		toast.info("Alteração de carteira/cartão ainda não implementada.");
+		setPendingContractAction("change-wallet");
 	};
 
 	const handleEndContract = () => {
-		const confirmed = window.confirm(
-			"Tem certeza que deseja encerrar este contrato?\nAs parcelas já pagas não serão alteradas."
-		);
-		if (!confirmed) return;
-		toast.info("Encerramento de contrato ainda não implementado.");
+		setPendingContractAction("end-contract");
 	};
+
+	const handleConfirmContractAction = () => {
+		if (!pendingContractAction) return;
+		if (pendingContractAction === "cancel-future") {
+			toast.info("Cancelamento de parcelas futuras ainda não implementado.");
+		} else if (pendingContractAction === "change-wallet") {
+			toast.info("Alteração de carteira/cartão ainda não implementada.");
+		} else {
+			toast.info("Encerramento de contrato ainda não implementado.");
+		}
+		setPendingContractAction(null);
+	};
+
+	const contractActionTitle =
+		pendingContractAction === "cancel-future"
+			? "Cancelar parcelas futuras"
+			: pendingContractAction === "change-wallet"
+				? "Alterar carteira/cartão"
+				: "Encerrar contrato";
+	const contractActionDescription =
+		pendingContractAction === "cancel-future"
+			? `Você deseja cancelar as ${futureCount} parcelas futuras? As já pagas não serão afetadas.`
+			: pendingContractAction === "change-wallet"
+				? "Alterar carteira/cartão impacta as parcelas futuras. Deseja continuar?"
+				: "Tem certeza que deseja encerrar este contrato? As parcelas já pagas não serão alteradas.";
+	const contractActionConfirmLabel =
+		pendingContractAction === "cancel-future"
+			? "Cancelar futuras"
+			: pendingContractAction === "change-wallet"
+				? "Confirmar alteração"
+				: "Encerrar contrato";
 
 	const openEditAmountModal = (occurrence: OccurrenceItem) => {
 		setSelectedOccurrence(occurrence);
@@ -566,6 +588,26 @@ export const ContractInstallmentDetailsDrawer = ({
 				)}
 			</SheetContent>
 		</Sheet>
+		<Dialog open={pendingContractAction !== null} onOpenChange={(open) => !open && setPendingContractAction(null)}>
+			<DialogContent className="sm:max-w-md">
+				<DialogHeader>
+					<DialogTitle>{contractActionTitle}</DialogTitle>
+					<DialogDescription>{contractActionDescription}</DialogDescription>
+				</DialogHeader>
+				<DialogFooter>
+					<Button type="button" variant="outline" onClick={() => setPendingContractAction(null)}>
+						Cancelar
+					</Button>
+					<Button
+						type="button"
+						variant={pendingContractAction === "end-contract" ? "destructive" : "default"}
+						onClick={handleConfirmContractAction}
+					>
+						{contractActionConfirmLabel}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 		<Dialog open={isEditAmountOpen} onOpenChange={setIsEditAmountOpen}>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
