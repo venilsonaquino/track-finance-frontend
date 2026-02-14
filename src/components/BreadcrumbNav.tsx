@@ -21,7 +21,7 @@ const PageBreadcrumbNav = ({ items, children }: { items?: BreadcrumbItem[] | nul
 	const breadcrumbItems = items || [];
 	const lastItem = breadcrumbItems[breadcrumbItems.length - 1];
 	return (
-    <div className="mb-4">
+    <div>
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>

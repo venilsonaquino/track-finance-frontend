@@ -7,7 +7,6 @@ import TransactionCard from "./transaction-card";
 import { useTransactions } from "@/pages/transactions/hooks/use-transactions";
 import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { toast } from "sonner";
-import { IntervalType } from "@/types/Interval-type ";
 import { useNavigate } from "react-router-dom";
 
 interface ReviewTransactionProps {
@@ -66,25 +65,20 @@ export const ReviewTransaction = ({ transactions, onCancel, setImportedTransacti
 		setIsSaving(true);
 	
 		try {
-			const transactionsToSave: TransactionRequest[] = transactions.map((transaction) => ({
-				depositedDate: transaction.depositedDate,
-				description: transaction.description,
-				walletId: transaction.wallet?.id!,
-				categoryId: transaction.category?.id!,
-				fitId: transaction.fitId,
-				amount: Number(transaction.amount),
-				isInstallment: transaction.isInstallment,
-				installmentNumber: transaction.installmentNumber,
-				installmentInterval: transaction.installmentInterval as IntervalType,
-				isRecurring: transaction.isRecurring,
-				bankName: transaction.bankName,
-				bankId: transaction.bankId,
-				accountId: transaction.accountId,
-				accountType: transaction.accountType,
-				currency: transaction.currency,
-				transactionDate: transaction.transactionDate,
-				transactionSource: transaction.transactionSource,
-			}));
+			const transactionsToSave: TransactionRequest[] = transactions.map((transaction) => {
+				const amountValue = Number(transaction.amount);
+				const payload: TransactionRequest = {
+					depositedDate: transaction.depositedDate,
+					description: transaction.description,
+					walletId: transaction.wallet?.id!,
+					categoryId: transaction.category?.id!,
+					amount: amountValue,
+					transactionType: amountValue < 0
+							? "EXPENSE"
+							: "INCOME",
+				};
+				return payload;
+			});
 		
 			await createBatchTransactions(transactionsToSave);
 			

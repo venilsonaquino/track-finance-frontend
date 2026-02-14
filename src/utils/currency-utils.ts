@@ -11,3 +11,9 @@ export function maskCurrencyInput(value: string): string {
       maximumFractionDigits: 2 
     }).format(numberValue);
 }
+
+export function parseCurrencyInput(value: string): number {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return Number.NaN;
+  return Number(digits) / 100;
+}

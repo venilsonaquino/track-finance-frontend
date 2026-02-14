@@ -125,7 +125,7 @@ export const WalletForm = ({
       </div>
 
       <Button type="submit" className="w-full">
-        {initialData ? "Salvar Alterações OPA" : "Criar Carteira"}
+        {initialData ? "Salvar Alterações" : "Criar Carteira"}
       </Button>
     </form>
   );
