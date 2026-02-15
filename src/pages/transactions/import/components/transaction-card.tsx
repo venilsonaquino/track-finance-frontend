@@ -10,14 +10,13 @@ import {
 } from "@/components/ui/select";
 import { CheckCircle2, Save } from "lucide-react";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
-import { formatCurrency } from "@/utils/currency-utils";
+import { getAmountDisplay } from "@/utils/transaction-utils";
 import { WalletResponse } from "@/api/dtos/wallet/wallet-response";
 import { CategoryResponse } from "@/api/dtos/category/category-response";
 import { Button } from "@/components/ui/button";
 import { useTransactions } from "@/pages/transactions/hooks/use-transactions";
 import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { toast } from "sonner";
-import { IntervalType } from "@/types/Interval-type ";
 
 interface TransactionCardProps {
   transaction: TransactionResponse;
@@ -51,24 +50,16 @@ const TransactionCard = React.memo(({
 
   const handleSave = async (transaction: TransactionResponse) => {
     try {
+      const amountValue = Number(transaction.amount);
       const transactionRequest: TransactionRequest = {
         depositedDate: transaction.depositedDate,
         description: transaction.description,
         walletId: transaction.wallet?.id!,
         categoryId: transaction.category?.id!,
-        amount: Number(transaction.amount),
-        isInstallment: transaction.isInstallment,
-        installmentNumber: transaction.installmentNumber,
-        installmentInterval: transaction.installmentInterval as IntervalType,
-        isRecurring: transaction.isRecurring,
-        fitId: transaction.fitId,
-        bankName: transaction.bankName,
-        bankId: transaction.bankId,
-        accountId: transaction.accountId,
-        accountType: transaction.accountType,
-        currency: transaction.currency,
-        transactionDate: transaction.transactionDate,
-        transactionSource: transaction.transactionSource,
+        amount: amountValue,
+        transactionType: amountValue < 0
+            ? "EXPENSE"
+            : "INCOME",
       };
 
       await createTransaction(transactionRequest);
@@ -83,16 +74,13 @@ const TransactionCard = React.memo(({
     }
   }
 
-  const isNegative = Number(transaction.amount) < 0;
   const isDuplicate = transaction.isFitIdAlreadyExists;
 
-  const amountTextColor = isNegative
-    ? isDuplicate
-      ? "text-destructive/70"
-      : "text-destructive"
-    : isDuplicate
-      ? "text-emerald-500/70"
-      : "text-emerald-500";
+  const { text: amountText, className: amountClass } = getAmountDisplay(
+    Number(transaction.amount),
+    transaction.transactionType
+  );
+  const amountTextColor = isDuplicate ? `${amountClass} opacity-70` : amountClass;
 
   return (
     <Card
@@ -148,7 +136,7 @@ const TransactionCard = React.memo(({
           </div>
         </div>
         <p className={`text-lg font-semibold whitespace-nowrap ${amountTextColor}`}>
-          {formatCurrency(Number(transaction.amount))}
+          {amountText}
         </p>
       </div>
 

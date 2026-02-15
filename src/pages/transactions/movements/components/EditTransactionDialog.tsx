@@ -17,19 +17,15 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Calendar, Layers, PiggyBank, Timer, TrendingDown, TrendingUp, Info } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { useWallets } from "../../hooks/use-wallets";
 import { useCategories } from "../../hooks/use-categories";
-import { IntervalType } from "@/types/Interval-type ";
 import { DateUtils } from "@/utils/date-utils";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
 import { useTransactions } from "../../hooks/use-transactions";
 import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { toast } from "sonner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-type TransactionType = "income" | "expense";
+import { maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
 
 type EditTransactionDialogProps = {
 	transaction: TransactionResponse | null;
@@ -44,20 +40,7 @@ type FormState = {
 	depositedDate: string;
 	walletId: string;
 	categoryId: string;
-	transactionType: TransactionType;
-	isRecurring: boolean;
-	isInstallment: boolean;
-	installmentNumber: string;
-	installmentInterval: IntervalType;
-	affectBalance: boolean;
 };
-
-const intervalOptions: { label: string; value: IntervalType }[] = [
-	{ label: "Diário", value: "DAILY" },
-	{ label: "Semanal", value: "WEEKLY" },
-	{ label: "Mensal", value: "MONTHLY" },
-	{ label: "Anual", value: "YEARLY" },
-];
 
 const parseDepositedDate = (date?: string) => {
 	if (!date) return DateUtils.formatToISODate(new Date());
@@ -72,30 +55,19 @@ const buildInitialState = (transaction: TransactionResponse | null): FormState =
 			depositedDate: DateUtils.formatToISODate(new Date()),
 			walletId: "",
 			categoryId: "",
-			transactionType: "expense",
-			isRecurring: false,
-			isInstallment: false,
-			installmentNumber: "1",
-			installmentInterval: "MONTHLY",
-			affectBalance: true,
 		};
 	}
 
 	const amountValue = Number(transaction.amount);
+	const amountCents = Number.isNaN(amountValue) ? 0 : Math.round(Math.abs(amountValue) * 100);
 
 	return {
 		description: transaction.description || "",
-		amount: Number.isNaN(amountValue) ? "" : Math.abs(amountValue).toString(),
+		amount: Number.isNaN(amountValue) ? "" : maskCurrencyInput(amountCents.toString()),
 		depositedDate: parseDepositedDate(transaction.depositedDate),
 		walletId: transaction.wallet?.id || "",
 		categoryId: transaction.category?.id || "",
-		transactionType: amountValue < 0 ? "expense" : "income",
-	isRecurring: Boolean(transaction.isRecurring),
-	isInstallment: Boolean(transaction.isInstallment),
-	installmentNumber: transaction.installmentNumber ? transaction.installmentNumber.toString() : "1",
-	installmentInterval: (transaction.installmentInterval as unknown as IntervalType) || "MONTHLY",
-	affectBalance: transaction.affectBalance ?? true,
-};
+	};
 };
 
 export const EditTransactionDialog = ({
@@ -135,22 +107,6 @@ export const EditTransactionDialog = ({
 		}));
 	};
 
-	const handleToggleRecurring = (checked: boolean) => {
-		setFormData(prev => ({
-			...prev,
-			isRecurring: checked,
-			isInstallment: checked ? false : prev.isInstallment,
-		}));
-	};
-
-	const handleToggleInstallment = (checked: boolean) => {
-		setFormData(prev => ({
-			...prev,
-			isInstallment: checked,
-			isRecurring: checked ? false : prev.isRecurring,
-		}));
-	};
-
 	const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 
@@ -164,13 +120,14 @@ export const EditTransactionDialog = ({
 			return;
 		}
 
-		const amountValue = Number(formData.amount);
-		if (Number.isNaN(amountValue)) {
+		const amountValue = parseCurrencyInput(formData.amount);
+		if (Number.isNaN(amountValue) || amountValue <= 0) {
 			toast.error("Informe um valor válido.");
 			return;
 		}
 
-		const normalizedAmount = formData.transactionType === "expense" ? -Math.abs(amountValue) : Math.abs(amountValue);
+		const originalType = transaction.transactionType === "INCOME" ? "INCOME" : "EXPENSE";
+		const normalizedAmount = originalType === "EXPENSE" ? -Math.abs(amountValue) : Math.abs(amountValue);
 
 		const payload: TransactionRequest = {
 			id: transaction.id,
@@ -179,19 +136,8 @@ export const EditTransactionDialog = ({
 			walletId: formData.walletId,
 			categoryId: formData.categoryId,
 			amount: normalizedAmount,
-			isInstallment: formData.isInstallment || null,
-			installmentNumber: formData.isInstallment ? Number(formData.installmentNumber) || null : null,
-			installmentInterval: formData.isInstallment ? formData.installmentInterval : null,
-			isRecurring: formData.isRecurring || null,
-			fitId: transaction.fitId ?? null,
-			bankName: transaction.bankName ?? "Manual",
-			bankId: transaction.bankId ?? "manual",
-			accountId: transaction.accountId ?? formData.walletId,
-			accountType: transaction.accountType ?? "MANUAL",
-			currency: transaction.currency ?? "BRL",
-			transactionDate: formData.depositedDate,
-			transactionSource: transaction.transactionSource ?? "MANUAL",
-			affectBalance: formData.affectBalance,
+			transactionType: originalType,
+			affectBalance: transaction.affectBalance ?? true,
 		};
 
 		setIsSubmitting(true);
@@ -215,14 +161,14 @@ export const EditTransactionDialog = ({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-2xl">
+			<DialogContent className="sm:max-w-xl">
 				<form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
 					<DialogHeader className="space-y-2">
 						<DialogTitle>Editar transação</DialogTitle>
 						<DialogDescription>Atualize os dados da movimentação selecionada.</DialogDescription>
 					</DialogHeader>
 
-					<div className="flex-1 overflow-y-auto py-6 space-y-6 pr-1">
+					<div className="flex-1 overflow-y-auto py-6 space-y-4 pr-1">
 						<div className="space-y-2">
 							<Label htmlFor="description">Descrição</Label>
 							<Input
@@ -234,106 +180,29 @@ export const EditTransactionDialog = ({
 							/>
 						</div>
 
-						<div className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr] gap-3">
-							<div className="space-y-2">
-								<Label htmlFor="amount">Valor</Label>
+						<div className="space-y-2">
+							<Label htmlFor="amount">Valor</Label>
+							<Input
+								id="amount"
+								type="text"
+								inputMode="decimal"
+								placeholder="0,00"
+								value={formData.amount}
+								onChange={(e) => handleChange("amount", maskCurrencyInput(e.target.value))}
+								disabled
+							/>
+						</div>
+
+						<div className="space-y-2">
+							<Label htmlFor="date">Data</Label>
+							<div className="relative">
+								<Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
 								<Input
-									id="amount"
-									type="number"
-									step="0.01"
-									inputMode="decimal"
-									placeholder="0,00"
-									value={formData.amount}
-									onChange={(e) => handleChange("amount", e.target.value)}
-								/>
-							</div>
-							<div className="space-y-2">
-								<Label>Tipo</Label>
-								<div className="grid grid-cols-2 gap-2">
-									<Button
-										type="button"
-										variant={formData.transactionType === "income" ? "default" : "outline"}
-										onClick={() => handleChange("transactionType", "income")}
-										className="w-full"
-									>
-										<TrendingUp className="h-4 w-4 mr-2" />
-										Entrada
-									</Button>
-									<Button
-										type="button"
-										variant={formData.transactionType === "expense" ? "default" : "outline"}
-										onClick={() => handleChange("transactionType", "expense")}
-										className="w-full"
-									>
-										<TrendingDown className="h-4 w-4 mr-2" />
-										Saída
-									</Button>
-								</div>
-							</div>
-						</div>
-
-						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-							<div className="space-y-2">
-								<Label htmlFor="date">Data</Label>
-								<div className="relative">
-									<Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-									<Input
-										id="date"
-										type="date"
-										value={formData.depositedDate}
-										onChange={(e) => handleChange("depositedDate", e.target.value)}
-										className="pl-9"
-									/>
-								</div>
-							</div>
-							<div className="space-y-2">
-								<Label>Carteira</Label>
-								<Select
-									value={formData.walletId || undefined}
-									onValueChange={(value) => handleChange("walletId", value)}
-									disabled={walletsLoading}
-								>
-									<SelectTrigger>
-										<SelectValue placeholder="Selecione uma carteira" />
-									</SelectTrigger>
-									<SelectContent>
-										{walletsLoading ? (
-											<SelectItem value="loading" disabled>Carregando...</SelectItem>
-										) : wallets.length === 0 ? (
-											<SelectItem value="empty" disabled>Nenhuma carteira encontrada</SelectItem>
-										) : (
-											wallets.map(wallet => (
-												<SelectItem key={wallet.id} value={wallet.id!}>
-													{wallet.name}
-												</SelectItem>
-											))
-										)}
-									</SelectContent>
-								</Select>
-							</div>
-						</div>
-
-						<div className="space-y-1">
-							<div className="flex items-center justify-between">
-								<div className="flex items-center gap-2">
-									<Label className="cursor-default">Afetar saldo da carteira?</Label>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<button
-												type="button"
-												className="h-7 w-7 inline-flex items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground"
-											>
-												<Info className="h-4 w-4" />
-											</button>
-										</TooltipTrigger>
-										<TooltipContent side="top">
-											Se desativado, essa transação será registrada apenas para controle e não alterará seu saldo.
-										</TooltipContent>
-									</Tooltip>
-								</div>
-								<Switch
-									checked={formData.affectBalance}
-									onCheckedChange={(checked) => handleChange("affectBalance", checked)}
+									id="date"
+									type="date"
+									value={formData.depositedDate}
+									onChange={(e) => handleChange("depositedDate", e.target.value)}
+									className="pl-9"
 								/>
 							</div>
 						</div>
@@ -367,71 +236,31 @@ export const EditTransactionDialog = ({
 							</Select>
 						</div>
 
-						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-							<div className="flex items-center justify-between rounded-lg border p-3">
-								<div className="flex items-center gap-3">
-									<PiggyBank className="h-4 w-4 text-muted-foreground" />
-									<div className="space-y-0.5">
-										<p className="text-sm font-medium">Transação fixa</p>
-										<p className="text-xs text-muted-foreground">Repete todos os períodos</p>
-									</div>
-								</div>
-								<Switch
-									checked={formData.isRecurring}
-									onCheckedChange={handleToggleRecurring}
-								/>
-							</div>
-
-							<div className="flex items-center justify-between rounded-lg border p-3">
-								<div className="flex items-center gap-3">
-									<Layers className="h-4 w-4 text-muted-foreground" />
-									<div className="space-y-0.5">
-										<p className="text-sm font-medium">Parcelado</p>
-										<p className="text-xs text-muted-foreground">Dividido em várias vezes</p>
-									</div>
-								</div>
-								<Switch
-									checked={formData.isInstallment}
-									onCheckedChange={handleToggleInstallment}
-								/>
-							</div>
+						<div className="space-y-2">
+							<Label>Conta</Label>
+							<Select
+								value={formData.walletId || undefined}
+								onValueChange={(value) => handleChange("walletId", value)}
+								disabled={walletsLoading}
+							>
+								<SelectTrigger>
+									<SelectValue placeholder="Selecione uma conta" />
+								</SelectTrigger>
+								<SelectContent>
+									{walletsLoading ? (
+										<SelectItem value="loading" disabled>Carregando...</SelectItem>
+									) : wallets.length === 0 ? (
+										<SelectItem value="empty" disabled>Nenhuma conta encontrada</SelectItem>
+									) : (
+										wallets.map(wallet => (
+											<SelectItem key={wallet.id} value={wallet.id!}>
+												{wallet.name}
+											</SelectItem>
+										))
+									)}
+								</SelectContent>
+							</Select>
 						</div>
-
-						{formData.isInstallment && (
-							<div className="grid grid-cols-1 sm:grid-cols-[1fr_1.2fr] gap-3">
-								<div className="space-y-2">
-									<Label htmlFor="installmentNumber">Número de parcelas</Label>
-									<Input
-										id="installmentNumber"
-										type="number"
-										min={1}
-										value={formData.installmentNumber}
-										onChange={(e) => handleChange("installmentNumber", e.target.value)}
-									/>
-								</div>
-								<div className="space-y-2">
-									<Label>Intervalo</Label>
-									<Select
-										value={formData.installmentInterval || undefined}
-										onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
-									>
-										<SelectTrigger>
-											<SelectValue placeholder="Selecione o intervalo" />
-										</SelectTrigger>
-										<SelectContent>
-											{intervalOptions.map(option => (
-												<SelectItem key={option.value} value={option.value || ""}>
-													<div className="flex items-center gap-2">
-														<Timer className="h-4 w-4 text-muted-foreground" />
-														{option.label}
-													</div>
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</div>
-							</div>
-						)}
 					</div>
 
 					<DialogFooter className="gap-3 border-t pt-4">

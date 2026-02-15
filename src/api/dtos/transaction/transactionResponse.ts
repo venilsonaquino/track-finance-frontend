@@ -3,6 +3,27 @@ import { WalletResponse } from "../wallet/wallet-response";
 
 export interface TransactionResponse {
   id?: string;
+  transactionId?: string | null;
+  transaction_id?: string | null;
+  transactionType?: "INCOME" | "EXPENSE" | "TRANSFER";
+  transactionStatus?: "POSTED" | "REVERSED";
+  source?: "transaction" | "installment" | "recurring";
+  occurrenceStatus?: "SCHEDULED" | "POSTED" | "CANCELLED" | "SKIPPED";
+  occurrenceId?: string | null;
+  installmentIndex?: number | null;
+  dueDate?: string | null;
+  contractId?: string | null;
+  contract_id?: string | null;
+  contractType?: "RECURRING" | "INSTALLMENT" | null;
+  contract_type?: "RECURRING" | "INSTALLMENT" | null;
+  actions?: {
+    canMarkAsPaid?: boolean;
+    canReverse?: boolean;
+    canEditDueDate?: boolean;
+    canAdjustAmount?: boolean;
+    canSkip?: boolean;
+    canViewContract?: boolean;
+  };
   transferType: string;
   depositedDate: string;
   description: string;
@@ -11,10 +32,14 @@ export interface TransactionResponse {
   category: CategoryResponse | null;
   wallet: WalletResponse | null;
   isRecurring: boolean | null;
+  recurringContractId?: string | null;
+  recurring_contract_id?: string | null;
   recurrenceType: string | null;
   recurringInterval: string | null;
   recurringEndDate: string | null;
   isInstallment: boolean | null;
+  installmentContractId?: string | null;
+  installment_contract_id?: string | null;
   installmentNumber: number | null;
   installmentInterval: number | null;
   installmentEndDate: string | null;

@@ -18,15 +18,29 @@ import {
 	VisibilityState,
 } from "@tanstack/react-table";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface DataTableProps<TData, TValue> {
 	columns: ColumnDef<TData, TValue>[];
 	data: TData[];
 	toolbar?: React.ReactNode;
+	headerTitle?: string;
+	headerPeriod?: React.ReactNode;
+	headerSheet?: React.ReactNode;
+	variant?: "default" | "budget";
 }
 
-export function DataTable<TData, TValue>({ columns, data, toolbar }: DataTableProps<TData, TValue>) {
+export function DataTable<TData, TValue>({
+	columns,
+	data,
+	toolbar,
+	headerTitle,
+	headerPeriod,
+	headerSheet,
+	variant = "default",
+}: DataTableProps<TData, TValue>) {
 	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+	const isBudget = variant === "budget";
 
 	const table = useReactTable({
 		data,
@@ -43,7 +57,7 @@ export function DataTable<TData, TValue>({ columns, data, toolbar }: DataTablePr
 
 	return (
 		<>
-			<div className="flex items-center justify-center py-4 ">
+			<div className="">
 				{/* <Input
 					placeholder="Filtrar por nome..."
 					value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
@@ -81,13 +95,49 @@ export function DataTable<TData, TValue>({ columns, data, toolbar }: DataTablePr
 					</DropdownMenuContent>
 				</DropdownMenu> */}
 			</div>
-			<div className="rounded-md border overflow-x-auto">
+			<div
+				className={cn(
+					"border overflow-x-auto",
+					isBudget ? "rounded-xl bg-background/40 shadow-sm" : "rounded-md"
+				)}
+			>
 				<Table className="min-w-[100px]">
 					<TableHeader>
+						{(headerTitle || headerPeriod || headerSheet) && (
+							<TableRow>
+								<TableHead colSpan={columns.length} className="p-0">
+									<div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+										<div className="flex items-center gap-3">
+											{headerTitle && (
+												<span className="text-base font-semibold text-foreground">
+													{headerTitle}
+												</span>
+											)}
+										</div>
+										<div className="flex flex-wrap items-center gap-2">
+											{headerPeriod && (
+												<span className="text-sm text-muted-foreground">
+													{headerPeriod}
+												</span>
+											)}
+											{headerSheet && <div className="flex items-center">{headerSheet}</div>}
+										</div>
+									</div>
+								</TableHead>
+							</TableRow>
+						)}
 						{table.getHeaderGroups().map((headerGroup) => (
-							<TableRow key={headerGroup.id}>
+							<TableRow
+								key={headerGroup.id}
+								className={cn(
+									isBudget && "bg-zinc-900/90 text-white hover:bg-zinc-900/90"
+								)}
+							>
 								{headerGroup.headers.map((header) => (
-									<TableHead key={header.id}>
+									<TableHead
+										key={header.id}
+										className={cn(isBudget && "text-white")}
+									>
 										{header.isPlaceholder
 											? null
 											: flexRender(header.column.columnDef.header, header.getContext())}

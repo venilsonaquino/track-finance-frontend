@@ -19,22 +19,120 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Calendar, Layers, PiggyBank, Plus, Timer, TrendingDown, TrendingUp, Info } from "lucide-react";
+import { Calendar, ChevronRight, Layers, PiggyBank, Plus, Timer, TrendingDown, TrendingUp, Info } from "lucide-react";
 import { useWallets } from "../../hooks/use-wallets";
 import { useCategories } from "../../hooks/use-categories";
-import { useTransactions } from "../../hooks/use-transactions";
 import { toast } from "sonner";
-import { TransactionRequest } from "@/api/dtos/transaction/transactionRequest";
 import { IntervalType } from "@/types/Interval-type ";
 import { DateUtils } from "@/utils/date-utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { formatCurrency, maskCurrencyInput, parseCurrencyInput } from "@/utils/currency-utils";
+import { createMovement } from "@/features/movements/services/movementService";
+import { calculateInstallmentAmount, calculateInstallmentSchedule } from "@/features/movements/mappers/amountUtils";
+import { CreateMovementInput, MovementKind } from "@/features/movements/types";
 
 type TransactionType = "income" | "expense";
 
 type CreateTransactionDialogProps = {
 	onCreated?: () => void | Promise<void>;
 	defaultDate?: Date;
+	triggerLabel?: string;
+	triggerVariant?: React.ComponentProps<typeof Button>["variant"];
+	triggerSize?: React.ComponentProps<typeof Button>["size"];
+	triggerClassName?: string;
+	showTriggerIcon?: boolean;
 };
+
+type InstallmentItem = {
+	index: number;
+	date: string;
+	amount: number;
+};
+
+const MAX_AMOUNT = 9_999_999_999.99;
+const MIN_INSTALLMENTS = 1;
+const MAX_INSTALLMENTS = 24;
+const isInstallmentsCountValid = (count: number) =>
+	Number.isInteger(count) && count >= MIN_INSTALLMENTS && count <= MAX_INSTALLMENTS;
+
+const addInterval = (date: Date, installmentInterval: IntervalType, step: number) => {
+	const nextDate = new Date(date);
+	switch (installmentInterval) {
+		case "DAILY":
+			nextDate.setDate(nextDate.getDate() + step);
+			return nextDate;
+		case "WEEKLY":
+			nextDate.setDate(nextDate.getDate() + step * 7);
+			return nextDate;
+		case "YEARLY":
+			nextDate.setFullYear(nextDate.getFullYear() + step);
+			return nextDate;
+		case "MONTHLY":
+		default:
+			nextDate.setMonth(nextDate.getMonth() + step);
+			return nextDate;
+	}
+};
+
+const buildInstallmentSchedule = (
+	startDate: string,
+	amounts: number[],
+	installmentInterval: IntervalType
+): InstallmentItem[] => {
+	const baseDate = new Date(`${startDate}T00:00:00`);
+	return amounts.map((amount, index) => {
+		const installmentDate = addInterval(baseDate, installmentInterval, index);
+		return {
+			index: index + 1,
+			date: installmentDate.toLocaleDateString("pt-BR"),
+			amount,
+		};
+	});
+};
+
+const InstallmentDetails = ({
+	open,
+	onOpenChange,
+	items,
+	totalAmount,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	items: InstallmentItem[];
+	totalAmount: number;
+}) => (
+	<Collapsible open={open} onOpenChange={onOpenChange} className="w-full">
+		<CollapsibleTrigger asChild>
+			<Button
+				type="button"
+				aria-label="Alternar detalhes do parcelamento"
+				variant="outline"
+				size="sm"
+				className="w-full sm:w-auto"
+			>
+				Detalhar parcelas
+				<ChevronRight className={`ml-2 h-4 w-4 transition-transform ${open ? "rotate-90" : ""}`} />
+			</Button>
+		</CollapsibleTrigger>
+		<CollapsibleContent className="mt-3 space-y-3">
+			<div className="max-h-64 overflow-y-auto pr-1">
+				<div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
+					{items.map(item => (
+						<div key={item.index} className="flex items-center justify-between rounded-md border px-2 py-1">
+							<span>{item.index}ª parcela • {item.date}</span>
+							<span className="font-medium text-foreground">{formatCurrency(item.amount)}</span>
+						</div>
+					))}
+				</div>
+			</div>
+			<div className="flex items-center justify-between border-t pt-3 text-sm">
+				<span className="text-muted-foreground">Total</span>
+				<span className="font-semibold">{formatCurrency(totalAmount)}</span>
+			</div>
+		</CollapsibleContent>
+	</Collapsible>
+);
 
 const intervalOptions: { label: string; value: IntervalType }[] = [
 	{ label: "Diário", value: "DAILY" },
@@ -57,15 +155,24 @@ const buildInitialState = (date?: Date) => ({
 	affectBalance: true,
 });
 
-export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransactionDialogProps) => {
+export const CreateTransactionDialog = ({
+	onCreated,
+	defaultDate,
+	triggerLabel = "Nova Transação",
+	triggerVariant = "default",
+	triggerSize = "default",
+	triggerClassName,
+	showTriggerIcon = true,
+}: CreateTransactionDialogProps) => {
 	const [isOpen, setIsOpen] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [isInstallmentDetailsOpen, setIsInstallmentDetailsOpen] = useState(false);
+	const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 	const [formData, setFormData] = useState(() => buildInitialState(defaultDate));
+	const [amountOverMax, setAmountOverMax] = useState(false);
 
 	const { wallets, loading: walletsLoading } = useWallets();
 	const { categories, loading: categoriesLoading } = useCategories();
-	const { createTransaction } = useTransactions();
-
 	useEffect(() => {
 		setFormData(prev => ({
 			...prev,
@@ -74,12 +181,16 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 	}, [defaultDate]);
 
 	const isValid = useMemo(() => {
+		const installmentsCount = Number(formData.installmentNumber);
+		const hasValidInstallments = !formData.isInstallment || isInstallmentsCountValid(installmentsCount);
+
 		return Boolean(
 			formData.description.trim() &&
 			formData.amount &&
 			formData.depositedDate &&
 			formData.walletId &&
-			formData.categoryId
+			formData.categoryId &&
+			hasValidInstallments
 		);
 	}, [formData]);
 
@@ -90,11 +201,42 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 		}));
 	};
 
+	const handleAmountChange = (nextValue: string) => {
+		const maskedValue = maskCurrencyInput(nextValue);
+		const parsedValue = parseCurrencyInput(maskedValue);
+		const isOverMax = Number.isFinite(parsedValue) && parsedValue > MAX_AMOUNT;
+
+		if (isOverMax) {
+			setAmountOverMax(true);
+			handleChange("amount", maskCurrencyInput(String(MAX_AMOUNT)));
+			return;
+		}
+
+		setAmountOverMax(false);
+		handleChange("amount", maskedValue);
+	};
+
+	const handleAmountBlur = () => {
+		const maskedValue = maskCurrencyInput(formData.amount);
+		const parsedValue = parseCurrencyInput(maskedValue);
+		const isOverMax = Number.isFinite(parsedValue) && parsedValue > MAX_AMOUNT;
+
+		if (isOverMax) {
+			setAmountOverMax(true);
+			handleChange("amount", maskCurrencyInput(String(MAX_AMOUNT)));
+			return;
+		}
+
+		setAmountOverMax(false);
+		handleChange("amount", maskedValue);
+	};
+
 	const handleToggleRecurring = (checked: boolean) => {
 		setFormData(prev => ({
 			...prev,
 			isRecurring: checked,
 			isInstallment: checked ? false : prev.isInstallment,
+			installmentInterval: checked ? prev.installmentInterval ?? "MONTHLY" : prev.installmentInterval,
 		}));
 	};
 
@@ -103,8 +245,66 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			...prev,
 			isInstallment: checked,
 			isRecurring: checked ? false : prev.isRecurring,
+			installmentNumber: checked
+				? isInstallmentsCountValid(Number(prev.installmentNumber))
+					? prev.installmentNumber
+					: "1"
+				: prev.installmentNumber,
+			installmentInterval: checked ? "MONTHLY" : prev.installmentInterval,
 		}));
 	};
+
+	const installmentPreview = useMemo(() => {
+		const totalAmount = parseCurrencyInput(formData.amount);
+		const installmentsCount = Number(formData.installmentNumber);
+		const canShow =
+			formData.isInstallment &&
+			!Number.isNaN(totalAmount) &&
+			totalAmount > 0 &&
+			isInstallmentsCountValid(installmentsCount);
+
+		if (!canShow) {
+			return {
+				label: "—",
+				items: [] as InstallmentItem[],
+				totalAmount: 0,
+				canShow: false,
+			};
+		}
+
+		const schedule = calculateInstallmentSchedule(totalAmount, installmentsCount);
+		const perInstallment = calculateInstallmentAmount(totalAmount, installmentsCount);
+		if (schedule === null || perInstallment === null) {
+			return {
+				summary: "—",
+				items: [] as InstallmentItem[],
+				totalAmount: 0,
+				canShow: false,
+			};
+		}
+		return {
+			summary: `${installmentsCount}x · ${formatCurrency(perInstallment)}`,
+			items: buildInstallmentSchedule(
+				formData.depositedDate,
+				schedule.amounts,
+				formData.installmentInterval ?? "MONTHLY"
+			),
+			totalAmount,
+			canShow: true,
+		};
+	}, [
+		formData.amount,
+		formData.depositedDate,
+		formData.installmentInterval,
+		formData.installmentNumber,
+		formData.isInstallment,
+	]);
+
+	useEffect(() => {
+		if (!installmentPreview.canShow && isInstallmentDetailsOpen) {
+			setIsInstallmentDetailsOpen(false);
+		}
+	}, [installmentPreview.canShow, isInstallmentDetailsOpen]);
 
 	const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
@@ -114,39 +314,51 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 			return;
 		}
 
-		const amountValue = Number(formData.amount);
-		if (Number.isNaN(amountValue)) {
+		const amountValue = parseCurrencyInput(formData.amount);
+		if (Number.isNaN(amountValue) || amountValue <= 0) {
 			toast.error("Informe um valor válido.");
 			return;
 		}
+		if (amountValue > MAX_AMOUNT) {
+			toast.error(`Valor máximo: ${formatCurrency(MAX_AMOUNT)}`);
+			return;
+		}
 
-		const normalizedAmount = formData.transactionType === "expense" ? -Math.abs(amountValue) : Math.abs(amountValue);
+		const installmentsCount = Number(formData.installmentNumber);
+		if (formData.isInstallment && !isInstallmentsCountValid(installmentsCount)) {
+			toast.error(`Informe entre ${MIN_INSTALLMENTS} e ${MAX_INSTALLMENTS} parcelas.`);
+			return;
+		}
 
-		const payload: TransactionRequest = {
+		const absoluteAmount = Math.abs(amountValue);
+		const normalizedAmount =
+			formData.transactionType === "expense" ? -absoluteAmount : absoluteAmount;
+
+		const kind: MovementKind = formData.isInstallment
+			? "installment"
+			: formData.isRecurring
+				? "recurring"
+				: "single";
+
+		const amountForMovement = kind === "single" ? normalizedAmount : absoluteAmount;
+
+		const movementInput: CreateMovementInput = {
+			kind,
 			depositedDate: formData.depositedDate,
-			description: formData.description.trim(),
+			description: formData.description,
 			walletId: formData.walletId,
 			categoryId: formData.categoryId,
-			amount: normalizedAmount,
-			isInstallment: formData.isInstallment || null,
-			installmentNumber: formData.isInstallment ? Number(formData.installmentNumber) || null : null,
-			installmentInterval: formData.isInstallment ? formData.installmentInterval : null,
-			isRecurring: formData.isRecurring || null,
-			fitId: null,
-			bankName: "Manual",
-			bankId: "manual",
-			accountId: formData.walletId,
-			accountType: "MANUAL",
-			currency: "BRL",
-			transactionDate: formData.depositedDate,
-			transactionSource: "MANUAL",
+			amount: amountForMovement,
+			transactionType: formData.transactionType === "expense" ? "EXPENSE" : "INCOME",
 			affectBalance: formData.affectBalance,
+			installmentInterval: formData.installmentInterval,
+			installmentsCount: formData.isInstallment ? installmentsCount : null,
 		};
 
 		setIsSubmitting(true);
 
 		try {
-			await createTransaction(payload);
+			await createMovement(movementInput);
 			toast.success("Transação criada com sucesso.");
 			setIsOpen(false);
 			setFormData(buildInitialState(defaultDate));
@@ -159,16 +371,19 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 		}
 	};
 
+	const shouldKeepAdvancedOpen = formData.isRecurring || formData.isInstallment;
+	const advancedOpen = isAdvancedOpen || shouldKeepAdvancedOpen;
+
 	return (
 		<Dialog open={isOpen} onOpenChange={setIsOpen}>
 			<DialogTrigger asChild>
-				<Button>
-					<Plus className="h-4 w-4 mr-2" />
-					Nova Transação
+				<Button variant={triggerVariant} size={triggerSize} className={triggerClassName}>
+					{showTriggerIcon && <Plus className="h-4 w-4 mr-2" />}
+					{triggerLabel}
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="sm:max-w-2xl">
-				<form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
+			<DialogContent className="sm:max-w-2xl overflow-x-hidden">
+				<form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh] overflow-x-hidden">
 					<DialogHeader className="space-y-2">
 						<DialogTitle>Nova transação</DialogTitle>
 						<DialogDescription>
@@ -176,7 +391,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 						</DialogDescription>
 					</DialogHeader>
 
-					<div className="flex-1 overflow-y-auto py-6 space-y-6 pr-1">
+					<div className="flex-1 overflow-y-auto overflow-x-hidden py-6 space-y-6 pr-1">
 						<div className="space-y-2">
 							<Label htmlFor="description">Descrição</Label>
 							<Input
@@ -188,20 +403,27 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 							/>
 						</div>
 
-						<div className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr] gap-3">
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 							<div className="space-y-2">
-								<Label htmlFor="amount">Valor</Label>
-								<Input
-									id="amount"
-									type="number"
-									step="0.01"
-									inputMode="decimal"
-									placeholder="0,00"
-									value={formData.amount}
-									onChange={(e) => handleChange("amount", e.target.value)}
-								/>
+								<Label htmlFor="amount">{formData.isInstallment ? "Valor total" : "Valor"}</Label>
+								<div className={formData.isInstallment ? "flex flex-col sm:flex-row sm:items-center gap-2 w-full min-w-0" : ""}>
+									<Input
+										id="amount"
+										type="text"
+										inputMode="decimal"
+										placeholder="0,00"
+										value={formData.amount}
+										onChange={(e) => handleAmountChange(e.target.value)}
+										onBlur={handleAmountBlur}
+									/>
+								</div>
+								{amountOverMax && (
+									<p className="text-xs text-destructive">
+										Valor máximo: {formatCurrency(MAX_AMOUNT)}
+									</p>
+								)}
 							</div>
-							<div className="space-y-2">
+							<div className="space-y-2 shrink-0">
 								<Label>Tipo</Label>
 								<div className="grid grid-cols-2 gap-2">
 									<Button
@@ -240,16 +462,53 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 									/>
 								</div>
 							</div>
-							<div className="space-y-2">
+						</div>
+
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+							<div className="space-y-2 min-w-0">
+								<Label>Categoria</Label>
+								<Select
+									value={formData.categoryId || undefined}
+									onValueChange={(value) => handleChange("categoryId", value)}
+									disabled={categoriesLoading}
+								>
+									<SelectTrigger className="w-full h-10">
+										<SelectValue placeholder="Selecione uma categoria" />
+									</SelectTrigger>
+
+									<SelectContent>
+										{categoriesLoading ? (
+											<SelectItem value="loading" disabled>Carregando...</SelectItem>
+										) : categories.length === 0 ? (
+											<SelectItem value="empty" disabled>Nenhuma categoria encontrada</SelectItem>
+										) : (
+											categories.map(category => (
+												<SelectItem key={category.id} value={category.id}>
+													<div className="flex items-center gap-2 min-w-0">
+														<span
+															className="w-2.5 h-2.5 rounded-full shrink-0"
+															style={{ backgroundColor: category.color }}
+														/>
+														<span className="truncate">{category.name}</span>
+													</div>
+												</SelectItem>
+											))
+										)}
+									</SelectContent>
+								</Select>
+							</div>
+
+							<div className="space-y-2 min-w-0">
 								<Label>Carteira</Label>
 								<Select
 									value={formData.walletId || undefined}
 									onValueChange={(value) => handleChange("walletId", value)}
 									disabled={walletsLoading}
 								>
-									<SelectTrigger>
+									<SelectTrigger className="w-full h-10">
 										<SelectValue placeholder="Selecione uma carteira" />
 									</SelectTrigger>
+
 									<SelectContent>
 										{walletsLoading ? (
 											<SelectItem value="loading" disabled>Carregando...</SelectItem>
@@ -258,7 +517,7 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 										) : (
 											wallets.map(wallet => (
 												<SelectItem key={wallet.id} value={wallet.id!}>
-													{wallet.name}
+													<span className="truncate">{wallet.name}</span>
 												</SelectItem>
 											))
 										)}
@@ -292,100 +551,147 @@ export const CreateTransactionDialog = ({ onCreated, defaultDate }: CreateTransa
 							</div>
 						</div>
 
-						<div className="space-y-2">
-							<Label>Categoria</Label>
-							<Select
-								value={formData.categoryId || undefined}
-								onValueChange={(value) => handleChange("categoryId", value)}
-								disabled={categoriesLoading}
-							>
-								<SelectTrigger>
-									<SelectValue placeholder="Selecione uma categoria" />
-								</SelectTrigger>
-								<SelectContent>
-									{categoriesLoading ? (
-										<SelectItem value="loading" disabled>Carregando...</SelectItem>
-									) : categories.length === 0 ? (
-										<SelectItem value="empty" disabled>Nenhuma categoria encontrada</SelectItem>
-									) : (
-										categories.map(category => (
-											<SelectItem key={category.id} value={category.id}>
-												<div className="flex items-center gap-2">
-													<span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: category.color }} />
-													{category.name}
-												</div>
-											</SelectItem>
-										))
-									)}
-								</SelectContent>
-							</Select>
-						</div>
-
-						<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-							<div className="flex items-center justify-between rounded-lg border p-3">
-								<div className="flex items-center gap-3">
-									<PiggyBank className="h-4 w-4 text-muted-foreground" />
-									<div className="space-y-0.5">
-										<p className="text-sm font-medium">Transação fixa</p>
-										<p className="text-xs text-muted-foreground">Repete todos os períodos</p>
-									</div>
-								</div>
-								<Switch
-									checked={formData.isRecurring}
-									onCheckedChange={handleToggleRecurring}
-								/>
-							</div>
-
-							<div className="flex items-center justify-between rounded-lg border p-3">
-								<div className="flex items-center gap-3">
-									<Layers className="h-4 w-4 text-muted-foreground" />
-									<div className="space-y-0.5">
-										<p className="text-sm font-medium">Parcelado</p>
-										<p className="text-xs text-muted-foreground">Dividido em várias vezes</p>
-									</div>
-								</div>
-								<Switch
-									checked={formData.isInstallment}
-									onCheckedChange={handleToggleInstallment}
-								/>
-							</div>
-						</div>
-
-						{formData.isInstallment && (
-							<div className="grid grid-cols-1 sm:grid-cols-[1fr_1.2fr] gap-3">
-								<div className="space-y-2">
-									<Label htmlFor="installmentNumber">Número de parcelas</Label>
-									<Input
-										id="installmentNumber"
-										type="number"
-										min={1}
-										value={formData.installmentNumber}
-										onChange={(e) => handleChange("installmentNumber", e.target.value)}
-									/>
-								</div>
-								<div className="space-y-2">
-									<Label>Intervalo</Label>
-									<Select
-										value={formData.installmentInterval || undefined}
-										onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
+						<Collapsible open={advancedOpen} onOpenChange={setIsAdvancedOpen}>
+							<div className="space-y-3">
+								<CollapsibleTrigger asChild>
+									<button
+										type="button"
+										className="text-sm text-muted-foreground hover:text-foreground"
 									>
-										<SelectTrigger>
-											<SelectValue placeholder="Selecione o intervalo" />
-										</SelectTrigger>
-										<SelectContent>
-											{intervalOptions.map(option => (
-												<SelectItem key={option.value} value={option.value || ""}>
-													<div className="flex items-center gap-2">
-														<Timer className="h-4 w-4 text-muted-foreground" />
-														{option.label}
-													</div>
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</div>
+										▸ Opções avançadas
+									</button>
+								</CollapsibleTrigger>
+								<CollapsibleContent className="space-y-4">
+									<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+										<div className="flex items-center justify-between rounded-lg border p-3">
+											<div className="flex items-center gap-3">
+												<PiggyBank className="h-4 w-4 text-muted-foreground" />
+												<div className="space-y-0.5">
+													<p className="text-sm font-medium">Transação fixa</p>
+													<p className="text-xs text-muted-foreground">Repete todos os períodos</p>
+												</div>
+											</div>
+											<Switch
+												checked={formData.isRecurring}
+												onCheckedChange={handleToggleRecurring}
+											/>
+										</div>
+
+										<div className="flex items-center justify-between rounded-lg border p-3">
+											<div className="flex items-center gap-3">
+												<Layers className="h-4 w-4 text-muted-foreground" />
+												<div className="space-y-0.5">
+													<p className="text-sm font-medium">Parcelado</p>
+													<p className="text-xs text-muted-foreground">Dividido em várias vezes</p>
+												</div>
+											</div>
+											<Switch
+												checked={formData.isInstallment}
+												onCheckedChange={handleToggleInstallment}
+											/>
+										</div>
+									</div>
+
+									{formData.isRecurring && (
+										<div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+											<div>
+												<p className="text-sm font-medium">Transação fixa</p>
+												<p className="text-xs text-muted-foreground">Defina com que frequência a transação se repete</p>
+											</div>
+											<div className="flex items-center gap-2">
+												<Label className="text-xs text-muted-foreground">Intervalo</Label>
+												<Select
+													value={formData.installmentInterval || undefined}
+													onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
+												>
+													<SelectTrigger className="h-9">
+														<SelectValue placeholder="Selecione o intervalo" />
+													</SelectTrigger>
+													<SelectContent>
+														{intervalOptions.map(option => (
+															<SelectItem key={option.value} value={option.value || ""}>
+																<div className="flex items-center gap-2">
+																	<Timer className="h-4 w-4 text-muted-foreground" />
+																	{option.label}
+																</div>
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</div>
+										</div>
+									)}
+
+									{formData.isInstallment && (
+										<div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+											<div className="flex items-center justify-between">
+												<div>
+													<p className="text-sm font-medium">Parcelamento</p>
+													<p className="text-xs text-muted-foreground">Resumo das parcelas</p>
+												</div>
+											</div>
+											<div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full min-w-0">
+												<div className="flex items-center gap-2">
+													<Label className="text-xs text-muted-foreground">Parcelas</Label>
+													<Select
+														value={formData.installmentNumber}
+														onValueChange={(value) => handleChange("installmentNumber", value)}
+													>
+														<SelectTrigger className="w-[88px] min-w-[88px] h-9 flex-shrink-0">
+															<SelectValue placeholder="1" />
+														</SelectTrigger>
+														<SelectContent>
+															{Array.from({ length: MAX_INSTALLMENTS }, (_, index) => index + MIN_INSTALLMENTS).map(count => (
+																<SelectItem key={count} value={String(count)}>
+																	{count}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+												<div className="flex items-center min-w-0 gap-1 w-full sm:w-auto">
+													<span className="min-w-0 max-w-[200px] truncate text-sm text-muted-foreground">
+														{installmentPreview.canShow ? installmentPreview.summary : "—"}
+													</span>
+												</div>
+												<div className="flex items-center gap-2">
+													<Label className="text-xs text-muted-foreground">Intervalo</Label>
+													<Select
+														value={formData.installmentInterval || undefined}
+														onValueChange={(value) => handleChange("installmentInterval", value as IntervalType)}
+													>
+														<SelectTrigger className="h-9">
+															<SelectValue placeholder="Mensal" />
+														</SelectTrigger>
+														<SelectContent>
+															{intervalOptions.map(option => (
+																<SelectItem key={option.value} value={option.value || ""}>
+																	<div className="flex items-center gap-2">
+																		<Timer className="h-4 w-4 text-muted-foreground" />
+																		{option.label}
+																	</div>
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+											</div>
+											{installmentPreview.canShow && (
+												<div className="w-full">
+													<InstallmentDetails
+														open={isInstallmentDetailsOpen}
+														onOpenChange={setIsInstallmentDetailsOpen}
+														items={installmentPreview.items}
+														totalAmount={installmentPreview.totalAmount}
+													/>
+												</div>
+											)}
+										</div>
+									)}
+								</CollapsibleContent>
 							</div>
-						)}
+						</Collapsible>
+
 					</div>
 
 					<DialogFooter className="gap-3 border-t pt-4">

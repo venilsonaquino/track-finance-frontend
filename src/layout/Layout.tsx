@@ -37,8 +37,8 @@ const Layout = ({ children }: { children: ReactNode }) => {
               <TopNavbar />
             </Suspense>
             <div className="page-content flex-1 overflow-y-auto">
-              <div className="container-fluid p-4 min-w-0">
-                <div className="breadcrumb-container py-2">
+              <div className="container-fluid px-4 min-w-0">
+                <div className="breadcrumb-container py-1">
                 </div>
                 <Suspense fallback={FallbackLoader}>
                   <div className="min-w-0 w-full">

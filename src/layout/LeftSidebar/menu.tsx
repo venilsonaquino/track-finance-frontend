@@ -251,7 +251,7 @@ export const VERTICAL_MENU_ITEMS: MenuItemType[] = [
 // 			{
 // 				key: 'auth-login',
 // 				label: 'Log In',
-// 				url: '/auth/login',
+// 				url: '/auth',
 // 				parentKey: 'auth',
 // 			},
 // 			{
