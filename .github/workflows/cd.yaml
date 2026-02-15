@@ -56,7 +56,7 @@ jobs:
             venilson/track-finance-frontend:latest
             venilson/track-finance-frontend:${{ needs.tag-version.outputs.new_tag }}
           build-args: |
-            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}
+            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL || 'https://api-trackfinance.nexux.dev.br' }}
 
       - name: Smoke test
         run: |
