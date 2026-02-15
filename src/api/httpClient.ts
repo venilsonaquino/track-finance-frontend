@@ -2,8 +2,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { AuthService } from './services/authService';
 import { hasCookie, setCookie, getCookie } from 'cookies-next';
 
-const baseURL =
-    import.meta.env.VITE_API_BASE_URL || 'https://api-trackfinance.nexux.dev.br';
+const baseURL = '/api';
 const authSessionKey = '_TRACK_FINANCE_TOKEN_';
 
 // Função que será chamada quando um token for atualizado
