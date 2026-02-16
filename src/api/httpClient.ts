@@ -2,7 +2,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { AuthService } from './services/authService';
 import { hasCookie, setCookie, getCookie } from 'cookies-next';
 
-const baseURL = '/api';
+const baseURL = import.meta.env.VITE_API_URL || '/api';
 const authSessionKey = '_TRACK_FINANCE_TOKEN_';
 
 // Função que será chamada quando um token for atualizado
