@@ -16,6 +16,8 @@ export const WalletCard = ({ wallet, onEdit, onDelete }: WalletCardProps) => {
   const formattedBalance = balanceValue.toFixed(2);
   const bank = wallet.bankId ? getBankById(wallet.bankId) : null;
   const color = bank?.color || "#000000";
+  const financialTypeLabel =
+    wallet.financialType === "CREDIT_CARD" ? "Cartão" : "Conta";
 
   return (
     <Card style={{ backgroundColor: color + "20" }}>
@@ -23,7 +25,7 @@ export const WalletCard = ({ wallet, onEdit, onDelete }: WalletCardProps) => {
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <BankLogo 
-              bankId={wallet.bankId} 
+              bankId={wallet.bankId ?? undefined} 
               size="lg" 
               fallbackIcon={<Wallet className="w-8 h-8" />}
             />
@@ -49,10 +51,16 @@ export const WalletCard = ({ wallet, onEdit, onDelete }: WalletCardProps) => {
       </CardHeader>
       <CardContent>
         <p className="text-sm text-gray-600 mb-2">{wallet.description}</p>
-        <div className="flex justify-between text-sm">
-          <span>Tipo: {wallet.walletType}</span>
-          <span>Saldo: R$ {formattedBalance}</span>
+        <div className="flex justify-between text-sm mb-1">
+          <span>Tipo financeiro: {financialTypeLabel}</span>
         </div>
+        {wallet.financialType === "ACCOUNT" ? (
+          <div className="text-sm">Saldo: R$ {formattedBalance}</div>
+        ) : (
+          <div className="text-sm">
+            Vencimento: {wallet.dueDay ? `Dia ${wallet.dueDay}` : "Não configurado"}
+          </div>
+        )}
         {bank && (
           <div className="mt-2 text-xs text-gray-500">
             Banco: {bank.name}

@@ -12,8 +12,8 @@ interface WalletDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   formData: Partial<WalletResponse>;
+  wallets: WalletResponse[];
   onSubmit: (data: WalletRequest) => void;
-  onInputChange: (field: string | number | symbol, value: string | number) => void;
   isEditing: boolean;
 }
 
@@ -21,8 +21,8 @@ export function WalletDialog({
   open,
   onOpenChange,
   formData,
+  wallets,
   onSubmit,
-  onInputChange,
   isEditing,
 }: WalletDialogProps) {
   return (
@@ -33,8 +33,10 @@ export function WalletDialog({
         </DialogHeader>
         <WalletForm
           initialData={formData as WalletRequest}
+          wallets={wallets}
           onSubmit={onSubmit}
-          onInputChange={onInputChange}
+          onCancel={() => onOpenChange(false)}
+          isEditing={isEditing}
         />
       </DialogContent>
     </Dialog>
