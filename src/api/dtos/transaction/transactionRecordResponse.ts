@@ -6,14 +6,41 @@ interface TransactionRecord {
   transactions: TransactionResponse[];
 }
 
+export type SummaryBadgeTrend = "UP" | "DOWN" | "FLAT";
+export type SummaryBadgeReason =
+  | "NO_BASELINE"
+  | "NO_CHANGE"
+  | "NEW_SPEND"
+  | "NEW_INCOME"
+  | "NEW_BALANCE"
+  | "INCREASE_VS_PREVIOUS"
+  | "DECREASE_VS_PREVIOUS";
+
+export interface SummaryBadge {
+  trend: SummaryBadgeTrend;
+  amount: number;
+  reason: SummaryBadgeReason;
+}
+
+export interface SummaryMetric {
+  amount: number;
+  badge: SummaryBadge;
+}
+
 interface Summary {
-  current_balance: number;
-  monthly_income: number;
-  monthly_expense: number;
-  monthly_balance: number;
+  income: SummaryMetric;
+  expense: SummaryMetric;
+  balance: SummaryMetric;
 }
 
 export default interface TransactionsRecordResponse {
-  records: TransactionRecord[];
+  period?: {
+    year: number;
+    month: number;
+    start: string;
+    end: string;
+  };
+  records?: TransactionRecord[];
+  items?: TransactionResponse[];
   summary: Summary;
 }

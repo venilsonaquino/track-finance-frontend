@@ -2,7 +2,10 @@ import PageBreadcrumbNav from "@/components/BreadcrumbNav";
 import { getAmountDisplay } from "@/utils/transaction-utils";
 import { useTransactions } from "../hooks/use-transactions";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
+import TransactionsRecordResponse, {
+	SummaryBadge,
+	SummaryMetric,
+} from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, CreditCard, MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
@@ -56,7 +59,6 @@ const TransactionsPage = () => {
 		period?: { year?: number; month?: number; start?: string; end?: string };
 	};
 	const [transactionsData, setTransactionsData] = useState<TransactionsRangeResponse | null>(null);
-	const [previousTransactionsData, setPreviousTransactionsData] = useState<TransactionsRangeResponse | null>(null);
 	const [currentDate, setCurrentDate] = useState(new Date());
 	const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 	const [editingTransaction, setEditingTransaction] = useState<TransactionResponse | null>(null);
@@ -98,12 +100,15 @@ const TransactionsPage = () => {
 
 	const normalizeTransactionsResponse = (
 		data: unknown
-	): TransactionsRecordResponse & { period?: { year?: number; month?: number; start?: string; end?: string } } => {
+	): TransactionsRangeResponse => {
+		const emptyMetric: SummaryMetric = {
+			amount: 0,
+			badge: { trend: "FLAT", amount: 0, reason: "NO_CHANGE" },
+		};
 		const emptySummary = {
-			current_balance: 0,
-			monthly_income: 0,
-			monthly_expense: 0,
-			monthly_balance: 0,
+			income: emptyMetric,
+			expense: emptyMetric,
+			balance: emptyMetric,
 		};
 
 		if (Array.isArray(data)) {
@@ -120,56 +125,32 @@ const TransactionsPage = () => {
 		}
 
 		if (data && typeof data === "object") {
-			const asAny = data as Partial<TransactionsRecordResponse> & {
+			const asAny = data as Partial<TransactionsRangeResponse> & {
 				transactions?: TransactionResponse[];
-				items?: TransactionResponse[];
 				data?: TransactionResponse[];
 				period?: { year?: number; month?: number; start?: string; end?: string };
 			};
 
-			if (Array.isArray(asAny.records)) {
-				return {
-					records: asAny.records,
-					summary: asAny.summary ?? emptySummary,
-					period: asAny.period,
-				};
-			}
-
-			const list = asAny.transactions ?? asAny.items ?? asAny.data;
+			const list = asAny.items ?? asAny.transactions ?? asAny.data;
 			if (Array.isArray(list)) {
 				return {
-					records: [
-						{
-							date: "",
-							endOfDayBalance: null,
-							transactions: list,
-						},
-					],
-					summary: emptySummary,
+					items: list,
+					records: Array.isArray(asAny.records)
+						? asAny.records
+						: [
+								{
+									date: "",
+									endOfDayBalance: null,
+									transactions: list,
+								},
+							],
+					summary: asAny.summary ?? emptySummary,
 					period: asAny.period,
 				};
 			}
 		}
 
-		return { records: [], summary: emptySummary };
-	};
-
-	const getMonthLabel = (date: Date) => {
-		const months = [
-			"janeiro",
-			"fevereiro",
-			"março",
-			"abril",
-			"maio",
-			"junho",
-			"julho",
-			"agosto",
-			"setembro",
-			"outubro",
-			"novembro",
-			"dezembro",
-		];
-		return months[date.getMonth()];
+		return { items: [], records: [], summary: emptySummary };
 	};
 
 	const getPeriodLabel = (date: Date) => {
@@ -233,9 +214,6 @@ const TransactionsPage = () => {
 				referenceDate = currentDate;
 			}
 
-			const previousMonthDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1);
-			const previousRange = DateUtils.getMonthStartAndEnd(previousMonthDate);
-
 			const statementMonth = referenceDate.getMonth() + 1;
 			const statementYear = referenceDate.getFullYear();
 			const hasSelectedCard = Boolean(selectedCardWallet?.id);
@@ -246,9 +224,8 @@ const TransactionsPage = () => {
 				setCardStatement(null);
 			}
 
-			const [currentResponse, previousResponse, statementResponse] = await Promise.all([
+			const [currentResponse, statementResponse] = await Promise.all([
 				getTransactions(startDate, endDate, view),
-				getTransactions(previousRange.startDate, previousRange.endDate, view),
 				hasSelectedCard
 					? CardStatementService.getStatementByMonth(selectedCardWallet!.id!, statementYear, statementMonth)
 							.then(response => response.data as CardStatementResponse)
@@ -260,7 +237,6 @@ const TransactionsPage = () => {
 			]);
 
 			setTransactionsData(normalizeTransactionsResponse(currentResponse));
-			setPreviousTransactionsData(normalizeTransactionsResponse(previousResponse));
 			setCardStatement(statementResponse);
 		} catch (error) {
 			console.error("Erro ao carregar transações:", error);
@@ -349,7 +325,10 @@ const TransactionsPage = () => {
 		}
 	};
 
-	const allTransactions = transactionsData?.records?.flatMap(record => record.transactions) || [];
+	const allTransactions =
+		transactionsData?.items ??
+		transactionsData?.records?.flatMap(record => record.transactions) ??
+		[];
 	const filteredTransactions = useMemo(() => {
 		let filtered = allTransactions;
 		if (activeFilters?.walletId) {
@@ -371,21 +350,6 @@ const TransactionsPage = () => {
 	const walletById = useMemo(() => {
 		return new Map((wallets ?? []).map(wallet => [wallet.id, wallet]));
 	}, [wallets]);
-
-	const previousTransactions = previousTransactionsData?.records?.flatMap(record => record.transactions) || [];
-	const filteredPreviousTransactions = useMemo(() => {
-		let filtered = previousTransactions;
-		if (activeFilters?.walletId) {
-			filtered = filtered.filter(transaction => transaction.wallet?.id === activeFilters.walletId);
-		}
-		if (activeFilters?.categoryIds?.length) {
-			filtered = filtered.filter(transaction => {
-				const categoryId = transaction.category?.id;
-				return categoryId ? activeFilters.categoryIds.includes(categoryId) : false;
-			});
-		}
-		return filtered;
-	}, [activeFilters, previousTransactions]);
 
 	type MovementItem = TransactionResponse;
 
@@ -753,138 +717,55 @@ const TransactionsPage = () => {
 		}
 	};
 
-	const buildTotals = (transactions: TransactionResponse[]) => {
-		let income = 0;
-		let expense = 0;
-		transactions.forEach(transaction => {
-			if (isScheduledOccurrence(transaction)) return;
-			if (isReversedTransaction(transaction)) return;
-			const amount = Number(transaction.amount);
-			if (!Number.isFinite(amount)) return;
-			if (transaction.transactionType === "INCOME") {
-				income += amount;
-				return;
-			}
-			if (transaction.transactionType === "EXPENSE") {
-				expense += Math.abs(amount);
-				return;
-			}
-			if (amount >= 0) {
-				income += amount;
-				return;
-			}
-			expense += Math.abs(amount);
-		});
-		return {
-			income,
-			expense,
-			balance: income - expense,
-		};
-	};
-	const summaryTotals = useMemo(() => {
-		return buildTotals(filteredTransactions);
-	}, [filteredTransactions]);
-	const previousTotals = useMemo(() => buildTotals(filteredPreviousTransactions), [filteredPreviousTransactions]);
-	const incomeDisplay = getAmountDisplay(summaryTotals.income, "INCOME");
-	const expenseDisplay = getAmountDisplay(summaryTotals.expense, "EXPENSE");
-	const balanceDisplay = getAmountDisplay(summaryTotals.balance);
+	const summaryFromApi = transactionsData?.summary;
+	const fallbackBadge: SummaryBadge = { trend: "FLAT", amount: 0, reason: "NO_CHANGE" };
+	const fallbackMetric: SummaryMetric = { amount: 0, badge: fallbackBadge };
+	const incomeMetric = summaryFromApi?.income ?? fallbackMetric;
+	const expenseMetric = summaryFromApi?.expense ?? fallbackMetric;
+	const balanceMetric = summaryFromApi?.balance ?? fallbackMetric;
+
+	const incomeDisplay = getAmountDisplay(incomeMetric.amount, "INCOME");
+	const expenseDisplay = getAmountDisplay(expenseMetric.amount, "EXPENSE");
+	const balanceDisplay = getAmountDisplay(balanceMetric.amount);
 
 	const responsePeriodLabel = getPeriodLabelFromResponse(transactionsData?.period);
 	const periodLabel = responsePeriodLabel ?? getPeriodLabel(currentDate);
-	const previousMonthLabel = getMonthLabel(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
 	const adjustingContractKind = adjustingTransaction ? resolveContractKind(adjustingTransaction) : null;
 	const statementCardView = useMemo(
 		() => buildStatementCardView(cardStatement, selectedCardWallet?.name),
 		[cardStatement, selectedCardWallet?.name]
 	);
 	const hasStatementItems = (cardStatement?.items?.length ?? 0) > 0;
-
-	const getDeltaBadge = (current: number, previous: number, kind: "income" | "expense" | "balance") => {
-		if (!Number.isFinite(previous)) {
-			return {
-				amountText: "▲ +R$ 0",
-				helperText: `Sem base comparativa`,
-				className: "text-muted-foreground",
-				icon: "",
-			};
-		}
-
-		if (previous === 0 && current === 0) {
-			return {
-				amountText: "▲ +R$ 0",
-				helperText: `Sem variação no período`,
-				className: "text-muted-foreground",
-				icon: "—",
-			};
-		}
-
-		if (previous === 0 && current !== 0) {
-			const diff = current;
-			const positive = diff > 0;
-			const sign = diff >= 0 ? "+" : "-";
-			const icon = diff >= 0 ? "▲" : "▼";
-			const className = (() => {
-				if (!diff) return "text-muted-foreground";
-				if (kind === "expense") {
-					return positive ? "text-red-500" : "text-emerald-500";
-				}
-				return positive ? "text-emerald-500" : "text-red-500";
-			})();
-
-			const helperText =
-				kind === "expense"
-					? `Novo gasto no período`
-					: kind === "income"
-						? `Primeira receita no período`
-						: `Sem base comparativa`;
-
-			return {
-				amountText: `${icon} ${sign}${formatCurrency(Math.abs(diff))}`,
-				helperText,
-				className,
-				icon,
-			};
-		}
-
-		const diff = current - previous;
-		const positive = diff >= 0;
-		const sign = diff >= 0 ? "+" : "-";
-		const icon = diff >= 0 ? "▲" : "▼";
-
-		const className = (() => {
-			if (!diff) return "text-muted-foreground";
-			if (kind === "expense") {
-				return positive ? "text-red-500" : "text-emerald-500";
-			}
-			return positive ? "text-emerald-500" : "text-red-500";
-		})();
-
-		if (diff === 0) {
-			return {
-				amountText: "▲ +R$ 0",
-				helperText: `Sem variação vs ${previousMonthLabel}`,
-				className: "text-muted-foreground",
-				icon,
-			};
-		}
-
-		const percentRaw = (diff / Math.abs(previous)) * 100;
-		const percent = Number.isFinite(percentRaw) ? Math.round(percentRaw) : null;
-		const relation = percent !== null
-			? `${percent > 0 ? "+" : ""}${percent}% vs ${previousMonthLabel}`
-			: `vs ${previousMonthLabel}`;
-
-		return {
-			amountText: `${icon} ${sign}${formatCurrency(Math.abs(diff))}`,
-			helperText: relation,
-			className,
-			icon,
-		};
+	const badgeClassName = (badge: SummaryBadge, kind: "income" | "expense" | "balance") => {
+		if (badge.trend === "FLAT") return "text-muted-foreground";
+		if (kind === "expense") return badge.trend === "UP" ? "text-red-500" : "text-emerald-500";
+		return badge.trend === "UP" ? "text-emerald-500" : "text-red-500";
 	};
-
-	const incomeDelta = getDeltaBadge(summaryTotals.income, previousTotals.income, "income");
-	const expenseDelta = getDeltaBadge(summaryTotals.expense, previousTotals.expense, "expense");
-	const balanceDelta = getDeltaBadge(summaryTotals.balance, previousTotals.balance, "balance");
+	const badgeAmountLabel = (badge: SummaryBadge) => {
+		const icon = badge.trend === "UP" ? "▲" : badge.trend === "DOWN" ? "▼" : "▲";
+		const sign = badge.trend === "DOWN" ? "-" : "+";
+		return `${icon} ${sign}${formatCurrency(Math.abs(badge.amount))}`;
+	};
+	const badgeReasonLabel = (reason: SummaryBadge["reason"]) => {
+		switch (reason) {
+			case "NO_BASELINE":
+				return "Sem base comparativa";
+			case "NO_CHANGE":
+				return "Sem variação no período";
+			case "NEW_SPEND":
+				return "Novo gasto no período";
+			case "NEW_INCOME":
+				return "Primeira receita no período";
+			case "NEW_BALANCE":
+				return "Novo saldo no período";
+			case "INCREASE_VS_PREVIOUS":
+				return "Aumento vs período anterior";
+			case "DECREASE_VS_PREVIOUS":
+				return "Queda vs período anterior";
+			default:
+				return "-";
+		}
+	};
 
 	const columns: ColumnDef<TransactionResponse>[] = [
 		{
@@ -992,12 +873,29 @@ const TransactionsPage = () => {
 			header: () => <div className="text-right">Valor</div>,
 			size: 120,
 			cell: ({ row }) => {
-				const amount = Number(row.getValue("amount"));
+				const rawAmount = Number(row.getValue("amount"));
 				const transaction = row.original as MovementItem;
+				const asAny = transaction as unknown as Record<string, unknown>;
+				const directionRaw =
+					transaction.direction ??
+					(typeof asAny.direction === "string" ? asAny.direction : undefined);
+				const direction =
+					directionRaw === "INCOME" || directionRaw === "EXPENSE" ? directionRaw : undefined;
+				const normalizedAmount = Number.isFinite(rawAmount) ? Math.abs(rawAmount) : 0;
+				const amountForDisplay =
+					direction === "INCOME"
+						? normalizedAmount
+						: direction === "EXPENSE"
+							? -normalizedAmount
+							: rawAmount;
+				const typeForDisplay =
+					direction === "INCOME" || direction === "EXPENSE"
+						? direction
+						: transaction.transactionType;
 				const isScheduled = isScheduledOccurrence(transaction);
 				const { text: amountText, className: amountClass } = getAmountDisplay(
-					amount,
-					transaction.transactionType
+					amountForDisplay,
+					typeForDisplay
 				);
 				
 				return (
@@ -1157,11 +1055,11 @@ const TransactionsPage = () => {
 											</span>
 											<div className="flex flex-col">
 												<span>Receitas</span>
-												<span className={`text-xs font-medium ${incomeDelta.className}`}>
-													{incomeDelta.amountText}
+												<span className={`text-xs font-medium ${badgeClassName(incomeMetric.badge, "income")}`}>
+													{badgeAmountLabel(incomeMetric.badge)}
 												</span>
 												<span className="text-[11px] text-muted-foreground">
-													{incomeDelta.helperText}
+													{badgeReasonLabel(incomeMetric.badge.reason)}
 												</span>
 											</div>
 										</div>
@@ -1178,11 +1076,11 @@ const TransactionsPage = () => {
 											</span>
 											<div className="flex flex-col">
 												<span>Despesas</span>
-												<span className={`text-xs font-medium ${expenseDelta.className}`}>
-													{expenseDelta.amountText}
+												<span className={`text-xs font-medium ${badgeClassName(expenseMetric.badge, "expense")}`}>
+													{badgeAmountLabel(expenseMetric.badge)}
 												</span>
 												<span className="text-[11px] text-muted-foreground">
-													{expenseDelta.helperText}
+													{badgeReasonLabel(expenseMetric.badge.reason)}
 												</span>
 											</div>
 										</div>
@@ -1229,11 +1127,11 @@ const TransactionsPage = () => {
 												</span>
 												<div className="flex flex-col">
 													<span>Saldo</span>
-													<span className={`text-xs font-medium ${balanceDelta.className}`}>
-														{balanceDelta.amountText}
+													<span className={`text-xs font-medium ${badgeClassName(balanceMetric.badge, "balance")}`}>
+														{badgeAmountLabel(balanceMetric.badge)}
 													</span>
 													<span className="text-[11px] text-violet-100/70">
-														{balanceDelta.helperText}
+														{badgeReasonLabel(balanceMetric.badge.reason)}
 													</span>
 												</div>
 											</div>

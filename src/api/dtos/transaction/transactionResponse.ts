@@ -3,6 +3,7 @@ import { WalletResponse } from "../wallet/wallet-response";
 
 export interface TransactionResponse {
   id?: string;
+  direction?: "INCOME" | "EXPENSE";
   transactionId?: string | null;
   transaction_id?: string | null;
   transactionType?: "INCOME" | "EXPENSE" | "TRANSFER";
