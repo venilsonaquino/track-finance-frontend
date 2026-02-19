@@ -4,7 +4,7 @@ import { useTransactions } from "../hooks/use-transactions";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import TransactionsRecordResponse from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { ChevronRight, CreditCard, MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
@@ -34,6 +34,7 @@ import { useWallets } from "../hooks/use-wallets";
 import { InstallmentContractService } from "@/api/services/installmentContractService";
 import { RecurringContractService } from "@/api/services/recurringContractService";
 import { buildMovementMenuActions, MovementRowActions } from "./actions-config";
+import { CardStatementService } from "@/api/services/cardStatementService";
 import {
 	Dialog,
 	DialogContent,
@@ -44,6 +45,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CardStatementResponse } from "@/api/dtos/contracts/cardStatementResponse";
+import { buildStatementCardView } from "./utils/statement-card";
 
 const TransactionsPage = () => {
 	const { getTransactions, deleteTransaction, reverseTransaction } = useTransactions();
@@ -73,6 +76,8 @@ const TransactionsPage = () => {
 	const [adjustAmountInput, setAdjustAmountInput] = useState("");
 	const [adjustScope, setAdjustScope] = useState<"single" | "future">("single");
 	const [isAdjustingAmount, setIsAdjustingAmount] = useState(false);
+	const [cardStatement, setCardStatement] = useState<CardStatementResponse | null>(null);
+	const [isCardStatementLoading, setIsCardStatementLoading] = useState(false);
 	const [activeFilters, setActiveFilters] = useState<{
 		startDate: string;
 		endDate: string;
@@ -81,6 +86,15 @@ const TransactionsPage = () => {
 		periodPreset: "month" | "last30" | "custom";
 		walletId: string | null;
 	} | null>(null);
+
+	const selectedCardWallet = useMemo(() => {
+		if (activeFilters?.walletId) {
+			const selectedWallet = wallets.find(wallet => wallet.id === activeFilters.walletId) ?? null;
+			return selectedWallet?.financialType === "CREDIT_CARD" ? selectedWallet : null;
+		}
+
+		return wallets.find(wallet => wallet.financialType === "CREDIT_CARD") ?? null;
+	}, [activeFilters?.walletId, wallets]);
 
 	const normalizeTransactionsResponse = (
 		data: unknown
@@ -222,17 +236,38 @@ const TransactionsPage = () => {
 			const previousMonthDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1);
 			const previousRange = DateUtils.getMonthStartAndEnd(previousMonthDate);
 
-			const [currentResponse, previousResponse] = await Promise.all([
+			const statementMonth = referenceDate.getMonth() + 1;
+			const statementYear = referenceDate.getFullYear();
+			const hasSelectedCard = Boolean(selectedCardWallet?.id);
+
+			if (hasSelectedCard) {
+				setIsCardStatementLoading(true);
+			} else {
+				setCardStatement(null);
+			}
+
+			const [currentResponse, previousResponse, statementResponse] = await Promise.all([
 				getTransactions(startDate, endDate, view),
 				getTransactions(previousRange.startDate, previousRange.endDate, view),
+				hasSelectedCard
+					? CardStatementService.getStatementByMonth(selectedCardWallet!.id!, statementYear, statementMonth)
+							.then(response => response.data as CardStatementResponse)
+							.catch((error) => {
+								console.error("Erro ao carregar fatura do cartão:", error);
+								return null;
+							})
+					: Promise.resolve(null),
 			]);
 
 			setTransactionsData(normalizeTransactionsResponse(currentResponse));
 			setPreviousTransactionsData(normalizeTransactionsResponse(previousResponse));
+			setCardStatement(statementResponse);
 		} catch (error) {
 			console.error("Erro ao carregar transações:", error);
+		} finally {
+			setIsCardStatementLoading(false);
 		}
-	}, [activeFilters, currentDate, getTransactions]);
+	}, [activeFilters, currentDate, getTransactions, selectedCardWallet]);
 
 	useEffect(() => {
 		loadTransactions();
@@ -758,6 +793,11 @@ const TransactionsPage = () => {
 	const periodLabel = responsePeriodLabel ?? getPeriodLabel(currentDate);
 	const previousMonthLabel = getMonthLabel(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
 	const adjustingContractKind = adjustingTransaction ? resolveContractKind(adjustingTransaction) : null;
+	const statementCardView = useMemo(
+		() => buildStatementCardView(cardStatement, selectedCardWallet?.name),
+		[cardStatement, selectedCardWallet?.name]
+	);
+	const hasStatementItems = (cardStatement?.items?.length ?? 0) > 0;
 
 	const getDeltaBadge = (current: number, previous: number, kind: "income" | "expense" | "balance") => {
 		if (!Number.isFinite(previous)) {
@@ -1151,27 +1191,58 @@ const TransactionsPage = () => {
 										</span>
 									</div>
 								</div>
-								<div className="rounded-xl border border-border/70 bg-background/80 p-6 shadow-sm">
-									<div className="flex items-center justify-between">
-										<div className="flex items-center gap-3 text-base font-semibold text-foreground">
-											<span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/10 text-blue-600">
-												<Wallet className="h-6 w-6" />
-											</span>
-											<div className="flex flex-col">
-												<span>Saldo</span>
-												<span className={`text-xs font-medium ${balanceDelta.className}`}>
-													{balanceDelta.amountText}
-												</span>
-												<span className="text-[11px] text-muted-foreground">
-													{balanceDelta.helperText}
-												</span>
+								{hasStatementItems && selectedCardWallet ? (
+									<div className="rounded-xl border border-violet-500/30 bg-gradient-to-r from-[#121022] via-[#20143b] to-[#121022] p-6 shadow-sm">
+										{isCardStatementLoading ? (
+											<div className="h-16 animate-pulse rounded-md bg-violet-400/10" />
+										) : (
+											<div className="flex items-center justify-between gap-3">
+												<div className="flex min-w-0 items-center gap-3">
+													<div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-500/15 text-violet-200">
+														<CreditCard className="h-6 w-6" />
+													</div>
+													<div className="min-w-0">
+														<p className="truncate text-base font-semibold text-violet-50">{statementCardView.title}</p>
+														<p className="truncate text-sm text-violet-100/90">{statementCardView.walletName}</p>
+														<p className="truncate text-xs text-violet-100/80">
+															{formatCurrency(statementCardView.amount)} <span className="mx-1 opacity-60">|</span> {statementCardView.dueLabel}
+														</p>
+													</div>
+												</div>
+												<Button
+													type="button"
+													className="h-9 shrink-0 rounded-md bg-violet-500 px-4 text-sm font-semibold text-white hover:bg-violet-400"
+													onClick={() => toast.info("Pagamento da fatura será integrado em breve.")}
+												>
+													Pagar
+													<ChevronRight className="h-4 w-4" />
+												</Button>
 											</div>
-										</div>
-										<span className={`text-base font-semibold ${balanceDisplay.className}`}>
-											{balanceDisplay.text}
-										</span>
+										)}
 									</div>
-								</div>
+								) : (
+									<div className="rounded-xl border border-violet-500/30 bg-gradient-to-r from-[#121022] via-[#20143b] to-[#121022] p-6 shadow-[0_0_24px_rgba(91,33,182,0.16)]">
+										<div className="flex items-center justify-between">
+											<div className="flex items-center gap-3 text-base font-semibold text-violet-50">
+												<span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-500/15 text-violet-200">
+													<Wallet className="h-6 w-6" />
+												</span>
+												<div className="flex flex-col">
+													<span>Saldo</span>
+													<span className={`text-xs font-medium ${balanceDelta.className}`}>
+														{balanceDelta.amountText}
+													</span>
+													<span className="text-[11px] text-violet-100/70">
+														{balanceDelta.helperText}
+													</span>
+												</div>
+											</div>
+											<span className={`text-base font-semibold ${balanceDisplay.className}`}>
+												{balanceDisplay.text}
+											</span>
+										</div>
+									</div>
+								)}
 							</div>
 						</div>
 
