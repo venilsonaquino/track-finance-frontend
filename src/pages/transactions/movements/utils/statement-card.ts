@@ -1,4 +1,4 @@
-import { CardStatementResponse } from "@/api/dtos/contracts/cardStatementResponse";
+import { CardStatementListItem } from "@/api/dtos/contracts/cardStatementResponse";
 
 const getStatementTitle = (status?: string | null): string => {
 	switch (String(status ?? "").toUpperCase()) {
@@ -13,12 +13,12 @@ const getStatementTitle = (status?: string | null): string => {
 	}
 };
 
-const getDueInDays = (statement: CardStatementResponse | null): number | null => {
-	if (typeof statement?.summary?.dueInDays === "number") {
-		return statement.summary.dueInDays;
+const getDueInDays = (item: CardStatementListItem | null): number | null => {
+	if (typeof item?.summary?.dueInDays === "number") {
+		return item.summary.dueInDays;
 	}
 
-	const dueDateRaw = statement?.summary?.dueDate ?? statement?.statement?.dueDate;
+	const dueDateRaw = item?.summary?.dueDate ?? item?.statement?.dueDate;
 	if (!dueDateRaw) return null;
 
 	const dueDate = new Date(`${dueDateRaw}T00:00:00`);
@@ -41,17 +41,17 @@ const getDueLabel = (dueInDays: number | null): string => {
 };
 
 export const buildStatementCardView = (
-	statement: CardStatementResponse | null,
-	fallbackWalletName?: string
+	item: CardStatementListItem | null
 ) => {
-	const amount = statement?.summary?.totalAmount ?? statement?.statement?.totalAmount ?? 0;
-	const dueInDays = getDueInDays(statement);
+	const amount = item?.summary?.totalAmount ?? item?.statement?.totalAmount ?? 0;
+	const dueInDays = getDueInDays(item);
 
 	return {
-		title: getStatementTitle(statement?.statement?.status),
+		title: getStatementTitle(item?.statement?.status),
 		amount,
 		dueInDays,
 		dueLabel: getDueLabel(dueInDays),
-		walletName: statement?.statement?.cardWalletName ?? fallbackWalletName ?? "Cartão",
+		bankId: item?.statement?.bankId ?? null,
+		walletName: item?.statement?.cardWalletName ?? "Cartão",
 	};
 };

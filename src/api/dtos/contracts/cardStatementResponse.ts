@@ -2,6 +2,7 @@ export interface CardStatementInfo {
 	id: string | null;
 	cardWalletId: string;
 	cardWalletName: string;
+	bankId?: string | null;
 	referenceMonth: string;
 	billingMonth?: string;
 	periodStart: string;
@@ -13,23 +14,21 @@ export interface CardStatementInfo {
 	paymentTransactionId: string | null;
 }
 
-export interface CardStatementItem {
-	id: string;
-	source: string;
-	contractId: string | null;
-	dueDate: string;
-	amount: number;
-	status: string;
-}
-
 export interface CardStatementSummary {
 	totalAmount: number;
 	dueDate: string;
 	dueInDays: number;
 }
 
-export interface CardStatementResponse {
+export interface CardStatementListItem {
 	statement: CardStatementInfo | null;
-	items: CardStatementItem[];
-	summary?: CardStatementSummary | null;
+	summary: CardStatementSummary | null;
+}
+
+export interface CardStatementsByMonthResponse {
+	period: {
+		year: number;
+		month: number;
+	};
+	items: CardStatementListItem[];
 }

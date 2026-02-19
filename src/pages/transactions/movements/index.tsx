@@ -7,7 +7,7 @@ import TransactionsRecordResponse, {
 	SummaryMetric,
 } from "@/api/dtos/transaction/transactionRecordResponse";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, CreditCard, MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, CreditCard, MoreVertical, Tag, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { DataTable } from "@/components/data-table/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { TransactionResponse } from "@/api/dtos/transaction/transactionResponse";
@@ -48,8 +48,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CardStatementResponse } from "@/api/dtos/contracts/cardStatementResponse";
+import {
+	CardStatementListItem,
+	CardStatementsByMonthResponse,
+} from "@/api/dtos/contracts/cardStatementResponse";
 import { buildStatementCardView } from "./utils/statement-card";
+import { getBankById } from "@/utils/banks";
 
 const TransactionsPage = () => {
 	const { getTransactions, deleteTransaction, reverseTransaction } = useTransactions();
@@ -79,8 +83,9 @@ const TransactionsPage = () => {
 	const [adjustAmountInput, setAdjustAmountInput] = useState("");
 	const [adjustScope, setAdjustScope] = useState<"single" | "future">("single");
 	const [isAdjustingAmount, setIsAdjustingAmount] = useState(false);
-	const [cardStatement, setCardStatement] = useState<CardStatementResponse | null>(null);
+	const [cardStatementsData, setCardStatementsData] = useState<CardStatementsByMonthResponse | null>(null);
 	const [isCardStatementLoading, setIsCardStatementLoading] = useState(false);
+	const [activeStatementIndex, setActiveStatementIndex] = useState(0);
 	const [activeFilters, setActiveFilters] = useState<{
 		startDate: string;
 		endDate: string;
@@ -89,15 +94,6 @@ const TransactionsPage = () => {
 		periodPreset: "month" | "last30" | "custom";
 		walletId: string | null;
 	} | null>(null);
-
-	const selectedCardWallet = useMemo(() => {
-		if (activeFilters?.walletId) {
-			const selectedWallet = wallets.find(wallet => wallet.id === activeFilters.walletId) ?? null;
-			return selectedWallet?.financialType === "CREDIT_CARD" ? selectedWallet : null;
-		}
-
-		return wallets.find(wallet => wallet.financialType === "CREDIT_CARD") ?? null;
-	}, [activeFilters?.walletId, wallets]);
 
 	const normalizeTransactionsResponse = (
 		data: unknown
@@ -217,42 +213,45 @@ const TransactionsPage = () => {
 
 			const statementMonth = referenceDate.getMonth() + 1;
 			const statementYear = referenceDate.getFullYear();
-			const hasSelectedCard = Boolean(selectedCardWallet?.id);
 			const previousMonthDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1);
 			const previousRange = DateUtils.getMonthStartAndEnd(previousMonthDate);
-
-			if (hasSelectedCard) {
-				setIsCardStatementLoading(true);
-			} else {
-				setCardStatement(null);
-			}
+			setIsCardStatementLoading(true);
 
 			const [currentResponse, previousResponse, statementResponse] = await Promise.all([
 				getTransactions(startDate, endDate, view),
 				getTransactions(previousRange.startDate, previousRange.endDate, view),
-				hasSelectedCard
-					? CardStatementService.getStatementByMonth(selectedCardWallet!.id!, statementYear, statementMonth)
-							.then(response => response.data as CardStatementResponse)
-							.catch((error) => {
-								console.error("Erro ao carregar fatura do cartão:", error);
-								return null;
-							})
-					: Promise.resolve(null),
+				CardStatementService.getStatementsByMonth(statementYear, statementMonth)
+					.then(response => response.data as CardStatementsByMonthResponse)
+					.catch((error) => {
+						console.error("Erro ao carregar faturas dos cartões:", error);
+						return null;
+					}),
 			]);
 
 			setTransactionsData(normalizeTransactionsResponse(currentResponse));
 			setPreviousTransactionsData(normalizeTransactionsResponse(previousResponse));
-			setCardStatement(statementResponse);
+			setCardStatementsData(statementResponse);
 		} catch (error) {
 			console.error("Erro ao carregar transações:", error);
 		} finally {
 			setIsCardStatementLoading(false);
 		}
-	}, [activeFilters, currentDate, getTransactions, selectedCardWallet]);
+	}, [activeFilters, currentDate, getTransactions]);
 
 	useEffect(() => {
 		loadTransactions();
 	}, [loadTransactions]);
+
+	const statementItems = cardStatementsData?.items ?? [];
+	useEffect(() => {
+		if (statementItems.length === 0) {
+			setActiveStatementIndex(0);
+			return;
+		}
+		if (activeStatementIndex >= statementItems.length) {
+			setActiveStatementIndex(0);
+		}
+	}, [activeStatementIndex, statementItems.length]);
 
 	const handleApplyFilters = (filters: {
 		startDate: string;
@@ -741,11 +740,22 @@ const TransactionsPage = () => {
 	const periodLabel = responsePeriodLabel ?? getPeriodLabel(currentDate);
 	const previousMonthLabel = getPeriodLabel(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
 	const adjustingContractKind = adjustingTransaction ? resolveContractKind(adjustingTransaction) : null;
+	const activeStatement: CardStatementListItem | null = statementItems[activeStatementIndex] ?? null;
 	const statementCardView = useMemo(
-		() => buildStatementCardView(cardStatement, selectedCardWallet?.name),
-		[cardStatement, selectedCardWallet?.name]
+		() => buildStatementCardView(activeStatement),
+		[activeStatement]
 	);
-	const hasStatementItems = (cardStatement?.items?.length ?? 0) > 0;
+	const hasStatementItems = statementItems.length > 0;
+	const hexToRgba = (hex: string, alpha: number) => {
+		const normalized = hex.replace("#", "");
+		if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return `rgba(138, 5, 190, ${alpha})`;
+		const r = parseInt(normalized.slice(0, 2), 16);
+		const g = parseInt(normalized.slice(2, 4), 16);
+		const b = parseInt(normalized.slice(4, 6), 16);
+		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+	};
+	const statementBank = statementCardView.bankId ? getBankById(statementCardView.bankId) : null;
+	const statementAccent = statementBank?.color ?? "#8A05BE";
 	const badgeClassName = (badge: SummaryBadge, kind: "income" | "expense" | "balance") => {
 		if (badge.trend === "FLAT") return "text-muted-foreground";
 		if (kind === "expense") return badge.trend === "UP" ? "text-red-500" : "text-emerald-500";
@@ -764,6 +774,14 @@ const TransactionsPage = () => {
 		const percentRaw = ((current - previous) / Math.abs(previous)) * 100;
 		const percent = Number.isFinite(percentRaw) ? Math.round(percentRaw) : 0;
 		return `${percent > 0 ? "+" : ""}${percent}% vs ${previousMonthLabel}`;
+	};
+	const handlePreviousStatement = () => {
+		if (statementItems.length <= 1) return;
+		setActiveStatementIndex(prev => (prev - 1 + statementItems.length) % statementItems.length);
+	};
+	const handleNextStatement = () => {
+		if (statementItems.length <= 1) return;
+		setActiveStatementIndex(prev => (prev + 1) % statementItems.length);
 	};
 
 	const columns: ColumnDef<TransactionResponse>[] = [
@@ -1088,15 +1106,50 @@ const TransactionsPage = () => {
 										</span>
 									</div>
 								</div>
-								{hasStatementItems && selectedCardWallet ? (
-									<div className="rounded-xl border border-violet-500/30 bg-gradient-to-r from-[#121022] via-[#20143b] to-[#121022] p-6 shadow-sm">
+								{hasStatementItems ? (
+									<div
+										className="relative rounded-xl border p-6 shadow-sm"
+										style={{
+											borderColor: hexToRgba(statementAccent, 0.45),
+											background: `linear-gradient(90deg, #121022 0%, ${hexToRgba(statementAccent, 0.22)} 52%, #121022 100%)`,
+										}}
+									>
+										{statementItems.length > 1 && (
+											<>
+												<button
+													type="button"
+													aria-label="Fatura anterior"
+													className="absolute -left-3 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border bg-[#16112a] text-violet-100 shadow-sm"
+													style={{ borderColor: hexToRgba(statementAccent, 0.5) }}
+													onClick={handlePreviousStatement}
+												>
+													<ChevronLeft className="h-4 w-4" />
+												</button>
+												<button
+													type="button"
+													aria-label="Próxima fatura"
+													className="absolute -right-3 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border bg-[#16112a] text-violet-100 shadow-sm"
+													style={{ borderColor: hexToRgba(statementAccent, 0.5) }}
+													onClick={handleNextStatement}
+												>
+													<ChevronRight className="h-4 w-4" />
+												</button>
+											</>
+										)}
 										{isCardStatementLoading ? (
 											<div className="h-16 animate-pulse rounded-md bg-violet-400/10" />
 										) : (
 											<div className="flex items-center justify-between gap-3">
 												<div className="flex min-w-0 items-center gap-3">
-													<div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-500/15 text-violet-200">
-														<CreditCard className="h-6 w-6" />
+													<div
+														className="inline-flex h-12 w-12 items-center justify-center rounded-full"
+														style={{ backgroundColor: hexToRgba(statementAccent, 0.18) }}
+													>
+														<BankLogo
+															bankId={statementCardView.bankId ?? undefined}
+															size="md"
+															fallbackIcon={<CreditCard className="h-6 w-6 text-violet-200" />}
+														/>
 													</div>
 													<div className="min-w-0">
 														<p className="truncate text-base font-semibold text-violet-50">{statementCardView.title}</p>
@@ -1108,7 +1161,8 @@ const TransactionsPage = () => {
 												</div>
 												<Button
 													type="button"
-													className="h-9 shrink-0 rounded-md bg-violet-500 px-4 text-sm font-semibold text-white hover:bg-violet-400"
+													className="h-9 shrink-0 rounded-md px-4 text-sm font-semibold text-white"
+													style={{ backgroundColor: statementAccent }}
 													onClick={() => toast.info("Pagamento da fatura será integrado em breve.")}
 												>
 													Pagar
