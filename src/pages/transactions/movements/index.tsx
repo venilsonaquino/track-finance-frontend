@@ -59,6 +59,7 @@ const TransactionsPage = () => {
 		period?: { year?: number; month?: number; start?: string; end?: string };
 	};
 	const [transactionsData, setTransactionsData] = useState<TransactionsRangeResponse | null>(null);
+	const [previousTransactionsData, setPreviousTransactionsData] = useState<TransactionsRangeResponse | null>(null);
 	const [currentDate, setCurrentDate] = useState(new Date());
 	const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 	const [editingTransaction, setEditingTransaction] = useState<TransactionResponse | null>(null);
@@ -217,6 +218,8 @@ const TransactionsPage = () => {
 			const statementMonth = referenceDate.getMonth() + 1;
 			const statementYear = referenceDate.getFullYear();
 			const hasSelectedCard = Boolean(selectedCardWallet?.id);
+			const previousMonthDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1);
+			const previousRange = DateUtils.getMonthStartAndEnd(previousMonthDate);
 
 			if (hasSelectedCard) {
 				setIsCardStatementLoading(true);
@@ -224,8 +227,9 @@ const TransactionsPage = () => {
 				setCardStatement(null);
 			}
 
-			const [currentResponse, statementResponse] = await Promise.all([
+			const [currentResponse, previousResponse, statementResponse] = await Promise.all([
 				getTransactions(startDate, endDate, view),
+				getTransactions(previousRange.startDate, previousRange.endDate, view),
 				hasSelectedCard
 					? CardStatementService.getStatementByMonth(selectedCardWallet!.id!, statementYear, statementMonth)
 							.then(response => response.data as CardStatementResponse)
@@ -237,6 +241,7 @@ const TransactionsPage = () => {
 			]);
 
 			setTransactionsData(normalizeTransactionsResponse(currentResponse));
+			setPreviousTransactionsData(normalizeTransactionsResponse(previousResponse));
 			setCardStatement(statementResponse);
 		} catch (error) {
 			console.error("Erro ao carregar transações:", error);
@@ -723,6 +728,10 @@ const TransactionsPage = () => {
 	const incomeMetric = summaryFromApi?.income ?? fallbackMetric;
 	const expenseMetric = summaryFromApi?.expense ?? fallbackMetric;
 	const balanceMetric = summaryFromApi?.balance ?? fallbackMetric;
+	const previousSummary = previousTransactionsData?.summary;
+	const previousIncomeAmount = previousSummary?.income?.amount ?? null;
+	const previousExpenseAmount = previousSummary?.expense?.amount ?? null;
+	const previousBalanceAmount = previousSummary?.balance?.amount ?? null;
 
 	const incomeDisplay = getAmountDisplay(incomeMetric.amount, "INCOME");
 	const expenseDisplay = getAmountDisplay(expenseMetric.amount, "EXPENSE");
@@ -730,6 +739,7 @@ const TransactionsPage = () => {
 
 	const responsePeriodLabel = getPeriodLabelFromResponse(transactionsData?.period);
 	const periodLabel = responsePeriodLabel ?? getPeriodLabel(currentDate);
+	const previousMonthLabel = getPeriodLabel(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
 	const adjustingContractKind = adjustingTransaction ? resolveContractKind(adjustingTransaction) : null;
 	const statementCardView = useMemo(
 		() => buildStatementCardView(cardStatement, selectedCardWallet?.name),
@@ -746,25 +756,14 @@ const TransactionsPage = () => {
 		const sign = badge.trend === "DOWN" ? "-" : "+";
 		return `${icon} ${sign}${formatCurrency(Math.abs(badge.amount))}`;
 	};
-	const badgeReasonLabel = (reason: SummaryBadge["reason"]) => {
-		switch (reason) {
-			case "NO_BASELINE":
-				return "Sem base comparativa";
-			case "NO_CHANGE":
-				return "Sem variação no período";
-			case "NEW_SPEND":
-				return "Novo gasto no período";
-			case "NEW_INCOME":
-				return "Primeira receita no período";
-			case "NEW_BALANCE":
-				return "Novo saldo no período";
-			case "INCREASE_VS_PREVIOUS":
-				return "Aumento vs período anterior";
-			case "DECREASE_VS_PREVIOUS":
-				return "Queda vs período anterior";
-			default:
-				return "-";
-		}
+	const badgeDeltaLabel = (current: number, previous: number | null) => {
+		if (previous === null || !Number.isFinite(previous)) return "Sem base comparativa";
+		if (previous === 0 && current !== 0) return "Sem base comparativa";
+		if (previous === 0 && current === 0) return `0% vs ${previousMonthLabel}`;
+
+		const percentRaw = ((current - previous) / Math.abs(previous)) * 100;
+		const percent = Number.isFinite(percentRaw) ? Math.round(percentRaw) : 0;
+		return `${percent > 0 ? "+" : ""}${percent}% vs ${previousMonthLabel}`;
 	};
 
 	const columns: ColumnDef<TransactionResponse>[] = [
@@ -1059,7 +1058,7 @@ const TransactionsPage = () => {
 													{badgeAmountLabel(incomeMetric.badge)}
 												</span>
 												<span className="text-[11px] text-muted-foreground">
-													{badgeReasonLabel(incomeMetric.badge.reason)}
+													{badgeDeltaLabel(incomeMetric.amount, previousIncomeAmount)}
 												</span>
 											</div>
 										</div>
@@ -1080,7 +1079,7 @@ const TransactionsPage = () => {
 													{badgeAmountLabel(expenseMetric.badge)}
 												</span>
 												<span className="text-[11px] text-muted-foreground">
-													{badgeReasonLabel(expenseMetric.badge.reason)}
+													{badgeDeltaLabel(expenseMetric.amount, previousExpenseAmount)}
 												</span>
 											</div>
 										</div>
@@ -1131,7 +1130,7 @@ const TransactionsPage = () => {
 														{badgeAmountLabel(balanceMetric.badge)}
 													</span>
 													<span className="text-[11px] text-violet-100/70">
-														{badgeReasonLabel(balanceMetric.badge.reason)}
+														{badgeDeltaLabel(balanceMetric.amount, previousBalanceAmount)}
 													</span>
 												</div>
 											</div>
